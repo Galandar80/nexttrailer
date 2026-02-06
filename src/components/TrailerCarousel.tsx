@@ -22,9 +22,8 @@ const TrailerCarousel = ({ featuredContent }: TrailerCarouselProps) => {
   const { toast } = useToast();
   
   const currentItem = featuredContent?.[currentIndex];
-  const isMovie = currentItem ? ('title' in currentItem) : false;
-  
-  const mediaType = isMovie ? "movie" : "tv";
+  const mediaType = currentItem?.media_type === "person" ? "person" : (currentItem?.media_type || (currentItem ? ('title' in currentItem ? "movie" : "tv") : "movie"));
+  const isMovie = mediaType === "movie";
   const title = currentItem ? (isMovie ? currentItem.title : currentItem.name) : "";
   
   useEffect(() => {
@@ -101,6 +100,10 @@ const TrailerCarousel = ({ featuredContent }: TrailerCarouselProps) => {
   
   const handleViewDetails = () => {
     if (!currentItem) return;
+    if (mediaType === "person") {
+      navigate(`/person/${currentItem.id}`);
+      return;
+    }
     navigate(`/${mediaType}/${currentItem.id}`);
   };
   

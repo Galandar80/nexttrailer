@@ -3,10 +3,9 @@ import { MediaItem } from './types';
 
 // Helper function to get image URLs from TMDB
 export const getImageUrl = (path: string | null, size: "w92" | "w185" | "w300" | "w342" | "w500" | "w780" | "original" = "w500"): string => {
-  if (!path) return "https://via.placeholder.com/500x750?text=No+Image";
-  // For placeholder paths used in mock data
+  if (!path) return "/placeholder.svg";
   if (path.startsWith("/placeholder")) {
-    return "https://via.placeholder.com/500x750?text=Example+Content";
+    return "/placeholder.svg";
   }
   return `https://image.tmdb.org/t/p/${size}${path}`;
 };

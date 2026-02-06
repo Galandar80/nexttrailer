@@ -40,12 +40,10 @@ const App = () => {
 
   // Assicura che l'app abbia caricato le configurazioni prima di renderizzare il contenuto
   useEffect(() => {
-    if (apiKey) {
-      console.log("API Key configurata:", apiKey.substring(0, 5) + "...");
-      // Invalida tutte le query per assicurarsi che vengano ricaricate con la nuova API key
+    if (apiKey || accessToken) {
       queryClient.invalidateQueries();
-      setIsReady(true);
     }
+    setIsReady(true);
   }, [apiKey, accessToken]);
 
   if (!isReady) {

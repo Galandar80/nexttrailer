@@ -15,11 +15,11 @@ export const MovieCard = ({ media, showBadge = false, similarTitle }: MovieCardP
   const [isHovered, setIsHovered] = useState(false);
   const navigate = useNavigate();
 
-  const isMovie = "title" in media;
+  const mediaType = media.media_type === "person" ? "person" : (media.media_type || ("title" in media ? "movie" : "tv"));
+  const isMovie = mediaType === "movie";
   const title = isMovie ? media.title : media.name;
   const date = isMovie ? media.release_date : media.first_air_date;
   const poster = tmdbApi.getImageUrl(media.poster_path, "w342");
-  const mediaType = isMovie ? "movie" : "tv";
   const year = date ? new Date(date).getFullYear() : "";
 
   // Dynamic badges
@@ -33,6 +33,10 @@ export const MovieCard = ({ media, showBadge = false, similarTitle }: MovieCardP
   };
 
   const handleClick = () => {
+    if (mediaType === "person") {
+      navigate(`/person/${media.id}`);
+      return;
+    }
     navigate(`/${mediaType}/${media.id}`);
   };
 

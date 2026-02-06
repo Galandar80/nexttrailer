@@ -100,7 +100,8 @@ const Home = () => {
           throw new Error("Nessun dato ricevuto dall'API");
         }
 
-        const topTrending = trending
+        const filteredTrending = trending.filter((item) => item.media_type !== "person");
+        const topTrending = filteredTrending
           .sort((a, b) => b.popularity - a.popularity)
           .slice(0, 8);
 
