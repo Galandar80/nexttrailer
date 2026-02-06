@@ -6,7 +6,7 @@ import {
     signOut as firebaseSignOut,
     onAuthStateChanged
 } from 'firebase/auth';
-import { auth } from '../services/firebase';
+import { auth, isFirebaseEnabled } from '../services/firebase';
 import { AuthContext } from './auth-core';
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -14,6 +14,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        if (!isFirebaseEnabled || !auth) {
+            setLoading(false);
+            return;
+        }
         const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
             setUser(currentUser);
             setLoading(false);
@@ -22,6 +26,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }, []);
 
     const signInWithGoogle = async () => {
+        if (!isFirebaseEnabled || !auth) {
+            throw new Error("Firebase non configurato");
+        }
         const provider = new GoogleAuthProvider();
         try {
             await signInWithPopup(auth, provider);
@@ -32,6 +39,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const logout = async () => {
+        if (!isFirebaseEnabled || !auth) {
+            throw new Error("Firebase non configurato");
+        }
         try {
             await firebaseSignOut(auth);
         } catch (error) {

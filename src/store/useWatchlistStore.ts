@@ -20,11 +20,13 @@ export const useWatchlistStore = create<WatchlistState>()(
     persist(
         (set, get) => {
             // Setup listener for auth changes to sync
-            onAuthStateChanged(auth, async (user) => {
-                if (user) {
-                    await get().syncWithCloud();
-                }
-            });
+            if (auth) {
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        await get().syncWithCloud();
+                    }
+                });
+            }
 
             return {
                 items: [],
@@ -41,7 +43,7 @@ export const useWatchlistStore = create<WatchlistState>()(
                         set({ items: newItems });
 
                         // Sync to Firestore if logged in
-                        if (auth.currentUser) {
+                        if (auth && db && auth.currentUser) {
                             try {
                                 const userRef = doc(db, 'users', auth.currentUser.uid);
                                 // Using arrayUnion to avoid duplicates in DB
@@ -61,7 +63,7 @@ export const useWatchlistStore = create<WatchlistState>()(
                     set({ items: newItems });
 
                     // Sync to Firestore if logged in
-                    if (auth.currentUser) {
+                    if (auth && db && auth.currentUser) {
                         try {
                             const userRef = doc(db, 'users', auth.currentUser.uid);
                             await updateDoc(userRef, { watchlist: newItems });
@@ -83,7 +85,7 @@ export const useWatchlistStore = create<WatchlistState>()(
                 },
 
                 syncWithCloud: async () => {
-                    if (!auth.currentUser) return;
+                    if (!auth || !db || !auth.currentUser) return;
                     set({ isLoading: true });
                     try {
                         const userRef = doc(db, 'users', auth.currentUser.uid);
