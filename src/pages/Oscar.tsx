@@ -28,6 +28,118 @@ type OscarCategoryView = {
 };
 
 const OSCAR_DATA_URL = "https://raw.githubusercontent.com/delventhalz/json-nominations/master/oscar-nominations.json";
+const WIKI_PAGES_BY_YEAR: Record<number, string> = {
+  2024: "96th_Academy_Awards",
+  2025: "97th_Academy_Awards",
+  2026: "98th_Academy_Awards"
+};
+
+const parseWikiCategories = (html: string): OscarCategoryView[] => {
+  const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
+  const invalidHeaders = new Set(["Nominee", "Nominees", "Film", "Films", "Category", "Award", "Recipient", "Recipients"]);
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const results = new Map<string, { nominees: Map<string, OscarMovieRef>; winners: Map<string, OscarMovieRef> }>();
+
+  const addNominee = (category: string, title: string, isWinner: boolean) => {
+    const key = `title:${title.toLowerCase()}`;
+    const entry =
+      results.get(category) || {
+        nominees: new Map<string, OscarMovieRef>(),
+        winners: new Map<string, OscarMovieRef>()
+      };
+    const ref = { title };
+    entry.nominees.set(key, ref);
+    if (isWinner) {
+      entry.winners.set(key, ref);
+    }
+    results.set(category, entry);
+  };
+
+  const extractCategoryFromCell = (cell: Element) => {
+    const candidate = Array.from(cell.querySelectorAll("b, strong")).find((node) => !node.closest("li") && node.closest("div"));
+    return candidate ? normalize(candidate.textContent || "") : "";
+  };
+
+  const extractTitles = (cell: Element) =>
+    Array.from(cell.querySelectorAll("i"))
+      .map((node) => ({
+        title: normalize(node.textContent || ""),
+        isWinner: Boolean(node.closest("b, strong"))
+      }))
+      .filter((item) => Boolean(item.title));
+
+  const allTables = Array.from(doc.querySelectorAll("table.wikitable"));
+  const winnersAnchor = doc.querySelector("#Winners_and_nominees");
+  const sectionRoot = winnersAnchor?.closest("h2") ?? winnersAnchor?.parentElement ?? null;
+  const tablesToParse =
+    sectionRoot !== null
+      ? (() => {
+          const collected: Element[] = [];
+          let current = sectionRoot.nextElementSibling;
+          while (current) {
+            if (current.tagName.toLowerCase() === "h2") break;
+            if (current.matches("table.wikitable")) {
+              collected.push(current);
+            } else {
+              collected.push(...Array.from(current.querySelectorAll("table.wikitable")));
+            }
+            current = current.nextElementSibling;
+          }
+          return collected.length > 0 ? collected : allTables;
+        })()
+      : allTables;
+
+  tablesToParse.forEach((table) => {
+    const rows = Array.from(table.querySelectorAll("tr"));
+    if (rows.length === 0) return;
+
+    let parsedCategoryBlocks = false;
+    rows.forEach((row) => {
+      const cells = Array.from(row.querySelectorAll("td, th"));
+      cells.forEach((cell) => {
+        const categoryName = extractCategoryFromCell(cell);
+        if (!categoryName || invalidHeaders.has(categoryName)) return;
+        parsedCategoryBlocks = true;
+        const titles = extractTitles(cell);
+        titles.forEach(({ title, isWinner }) => addNominee(categoryName, title, isWinner));
+      });
+    });
+    if (parsedCategoryBlocks) return;
+
+    const headerCells = Array.from(rows[0].querySelectorAll("th"));
+    const headerNames = headerCells
+      .map((cell) => normalize(cell.textContent || ""))
+      .filter((name) => name && !invalidHeaders.has(name));
+
+    rows.slice(1).forEach((row) => {
+      const rowHeader = row.querySelector("th");
+      const rowCells = Array.from(row.querySelectorAll("td"));
+      const rowHeaderText = rowHeader ? normalize(rowHeader.textContent || "") : "";
+      if (rowHeaderText && !invalidHeaders.has(rowHeaderText) && rowCells.length > 0) {
+        const titles = extractTitles(rowCells[0]);
+        titles.forEach(({ title, isWinner }) => addNominee(rowHeaderText, title, isWinner));
+        return;
+      }
+
+      if (headerNames.length === 0) return;
+      headerNames.forEach((category, index) => {
+        const cell = rowCells[index];
+        if (!cell) return;
+        const titles = extractTitles(cell);
+        if (titles.length === 0) return;
+        titles.forEach(({ title, isWinner }) => addNominee(category, title, isWinner));
+      });
+    });
+  });
+
+  return Array.from(results.entries())
+    .map(([name, data]) => ({
+      name,
+      nominees: Array.from(data.nominees.values()),
+      winners: Array.from(data.winners.values())
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+};
 
 const Oscar = () => {
   const currentYear = new Date().getFullYear();
@@ -41,6 +153,7 @@ const Oscar = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [categoryItems, setCategoryItems] = useState<Record<string, MediaItem[]>>({});
+  const [wikiCategoriesByYear, setWikiCategoriesByYear] = useState<Record<number, OscarCategoryView[]>>({});
 
   useEffect(() => {
     let isActive = true;
@@ -73,11 +186,47 @@ const Oscar = () => {
     };
   }, []);
 
-  const categoriesForYear = useMemo<OscarCategoryView[]>(() => {
-    const yearKey = String(selectedYear);
-    const fallbackYearKey = String(selectedYear - 1);
-    const shouldUseFallbackYear = nominations.length > 0 && !nominations.some((item) => item.year === yearKey);
-    const targetYearKey = shouldUseFallbackYear ? fallbackYearKey : yearKey;
+  useEffect(() => {
+    const wikiPage = WIKI_PAGES_BY_YEAR[selectedYear];
+    if (!wikiPage || wikiCategoriesByYear[selectedYear]) return;
+    let isActive = true;
+    const loadWiki = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`https://en.wikipedia.org/api/rest_v1/page/html/${wikiPage}`);
+        if (!response.ok) {
+          throw new Error("Request failed");
+        }
+        const html = await response.text();
+        const categories = parseWikiCategories(html);
+        if (isActive) {
+          setWikiCategoriesByYear((prev) => ({ ...prev, [selectedYear]: categories }));
+        }
+      } catch (err) {
+        if (isActive) {
+          setError("Impossibile caricare i titoli degli Oscar.");
+        }
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadWiki();
+    return () => {
+      isActive = false;
+    };
+  }, [selectedYear, wikiCategoriesByYear]);
+
+  const oscarYearView = useMemo(() => {
+    const parsedYears = nominations
+      .map((item) => Number.parseInt(item.year, 10))
+      .filter((year) => Number.isFinite(year));
+    const availableDataYears = Array.from(new Set(parsedYears)).sort((a, b) => b - a);
+    const dataYear = availableDataYears.find((year) => year <= selectedYear) ?? selectedYear;
+    const targetYearKey = String(dataYear);
     const categoriesMap = new Map<string, { nominees: Map<string, OscarMovieRef>; winners: Map<string, OscarMovieRef> }>();
 
     nominations.forEach((nomination) => {
@@ -107,14 +256,19 @@ const Oscar = () => {
       categoriesMap.set(nomination.category, entry);
     });
 
-    return Array.from(categoriesMap.entries())
+    const categories = Array.from(categoriesMap.entries())
       .map(([name, data]) => ({
         name,
         nominees: Array.from(data.nominees.values()),
         winners: Array.from(data.winners.values())
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
+    return { dataYear, categories };
   }, [nominations, selectedYear]);
+
+  const wikiCategories = wikiCategoriesByYear[selectedYear] || [];
+  const categoriesForYear = wikiCategories.length > 0 ? wikiCategories : oscarYearView.categories;
+  const effectiveYear = wikiCategories.length > 0 ? selectedYear : oscarYearView.dataYear;
 
   useEffect(() => {
     let isActive = true;
@@ -191,7 +345,7 @@ const Oscar = () => {
   }, [categoriesForYear]);
 
   const hasWinnersForYear = categoriesForYear.some((category) => category.winners.length > 0);
-  const showWinners = selectedYear < currentYear || hasWinnersForYear;
+  const showWinners = effectiveYear < currentYear || hasWinnersForYear;
   const modeLabel = showWinners ? "Candidati e vincitori" : "Candidati";
 
   return (
