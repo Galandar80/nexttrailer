@@ -59,6 +59,18 @@ export interface MediaDetails extends MediaItem {
   number_of_episodes?: number;
   tagline?: string;
   status?: string;
+  networks?: {
+    id: number;
+    name: string;
+    logo_path: string | null;
+    origin_country?: string;
+  }[];
+  next_episode_to_air?: {
+    air_date?: string;
+    season_number?: number;
+    episode_number?: number;
+    name?: string;
+  };
   production_companies?: {
     id: number;
     name: string;

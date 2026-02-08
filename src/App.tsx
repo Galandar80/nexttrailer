@@ -20,6 +20,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const Movies = lazy(() => import("./pages/Movies"));
 const TvSeries = lazy(() => import("./pages/TvSeries"));
 const Watchlist = lazy(() => import("./pages/Watchlist"));
+const Library = lazy(() => import("./pages/Library"));
 const PersonDetails = lazy(() => import("./pages/PersonDetails"));
 const Oscar = lazy(() => import("./pages/Oscar"));
 
@@ -78,6 +79,7 @@ const App = () => {
                     <Route path="/tv" element={<TvSeries />} />
                     <Route path="/oscar" element={<Oscar />} />
                     <Route path="/watchlist" element={<Watchlist />} />
+                    <Route path="/storico" element={<Library />} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </Suspense>

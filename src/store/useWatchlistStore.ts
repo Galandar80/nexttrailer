@@ -1,8 +1,8 @@
 
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import { MediaItem } from '@/services/tmdbApi';
-import { doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db, auth } from '@/services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
@@ -19,11 +19,22 @@ interface WatchlistState {
 export const useWatchlistStore = create<WatchlistState>()(
     persist(
         (set, get) => {
+            let activeUserId: string | null = null;
             // Setup listener for auth changes to sync
             if (auth) {
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
+                        if (activeUserId !== user.uid) {
+                            activeUserId = user.uid;
+                            localStorage.setItem("watchlist-user-id", user.uid);
+                            set({ items: [] });
+                        }
                         await get().syncWithCloud();
+                    } else {
+                        activeUserId = null;
+                        localStorage.removeItem("watchlist-user-id");
+                        localStorage.removeItem("watchlist-storage-guest");
+                        set({ items: [] });
                     }
                 });
             }
@@ -33,6 +44,7 @@ export const useWatchlistStore = create<WatchlistState>()(
                 isLoading: false,
 
                 addItem: async (item: MediaItem) => {
+                    if (!auth?.currentUser) return;
                     const { items } = get();
                     const exists = items.some(
                         (i) => i.id === item.id && i.media_type === item.media_type
@@ -56,6 +68,7 @@ export const useWatchlistStore = create<WatchlistState>()(
                 },
 
                 removeItem: async (id: number, mediaType: 'movie' | 'tv') => {
+                    if (!auth?.currentUser) return;
                     const { items } = get();
                     const newItems = items.filter(
                         (item) => !(item.id === id && item.media_type === mediaType)
@@ -130,6 +143,23 @@ export const useWatchlistStore = create<WatchlistState>()(
         },
         {
             name: 'watchlist-storage',
+            storage: createJSONStorage(() => ({
+                getItem: (_name: string) => {
+                    const uid = auth?.currentUser?.uid || localStorage.getItem("watchlist-user-id");
+                    const key = uid ? `watchlist-storage-${uid}` : "watchlist-storage-guest";
+                    return localStorage.getItem(key);
+                },
+                setItem: (_name: string, value: string) => {
+                    const uid = auth?.currentUser?.uid || localStorage.getItem("watchlist-user-id");
+                    const key = uid ? `watchlist-storage-${uid}` : "watchlist-storage-guest";
+                    localStorage.setItem(key, value);
+                },
+                removeItem: (_name: string) => {
+                    const uid = auth?.currentUser?.uid || localStorage.getItem("watchlist-user-id");
+                    const key = uid ? `watchlist-storage-${uid}` : "watchlist-storage-guest";
+                    localStorage.removeItem(key);
+                }
+            }))
         }
     )
 );

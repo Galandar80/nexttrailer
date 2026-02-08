@@ -1,16 +1,17 @@
-import { useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
-import { Film, Trash2, Calendar, Star } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Film, Trash2 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import MovieCard from "@/components/MovieCard";
 import { Button } from "@/components/ui/button";
 import { useWatchlistStore } from "@/store/useWatchlistStore";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/context/auth-core";
 
 const Watchlist = () => {
     const { items, removeItem, clearWatchlist } = useWatchlistStore();
     const { toast } = useToast();
+    const { user, canAccess, signInWithGoogle, sendVerificationEmail } = useAuth();
 
     const handleRemove = (id: number, mediaType: 'movie' | 'tv', title: string) => {
         removeItem(id, mediaType);
@@ -34,6 +35,33 @@ const Watchlist = () => {
 
     const movieCount = items.filter(item => item.media_type === 'movie').length;
     const tvCount = items.filter(item => item.media_type === 'tv').length;
+
+    if (!canAccess) {
+        return (
+            <div className="min-h-screen bg-background text-foreground">
+                <Navbar />
+                <main className="max-w-screen-xl mx-auto px-4 md:px-8 py-20">
+                    <div className="text-center max-w-xl mx-auto">
+                        <h1 className="text-3xl md:text-4xl font-bold mb-4">
+                            {user ? "Verifica la tua email" : "La Mia Watchlist"}
+                        </h1>
+                        <p className="text-muted-foreground mb-6">
+                            {user
+                                ? "Conferma l'account via email per usare la watchlist."
+                                : "Accedi per vedere e gestire la tua watchlist personale."}
+                        </p>
+                        <Button
+                            onClick={() => (user ? sendVerificationEmail() : signInWithGoogle())}
+                            className="bg-accent hover:bg-accent/90 text-white font-medium px-6 h-11"
+                        >
+                            {user ? "Invia email di verifica" : "Accedi"}
+                        </Button>
+                    </div>
+                </main>
+                <Footer />
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-background text-foreground">
@@ -111,7 +139,7 @@ const Watchlist = () => {
                                     className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10"
                                     onClick={() => handleRemove(
                                         item.id,
-                                        item.media_type,
+                                        item.media_type as "movie" | "tv",
                                         item.title || item.name || 'Contenuto'
                                     )}
                                 >

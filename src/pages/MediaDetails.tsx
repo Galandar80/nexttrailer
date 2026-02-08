@@ -14,6 +14,7 @@ import TvSeasons from "@/components/TvSeasons";
 import MediaGallery from "@/components/MediaGallery";
 // import ActorDetails from "@/components/ActorDetails"; // No longer needed here
 import { useWatchlistStore } from "@/store/useWatchlistStore";
+import { useLibraryStore, LibraryItem } from "@/store/useLibraryStore";
 import { SEO } from "@/components/SEO";
 
 // Sub-components
@@ -22,6 +23,7 @@ import { MediaInfo } from "@/components/media/MediaInfo";
 import { MediaActions } from "@/components/media/MediaActions";
 import { MediaTrivia } from "@/components/media/MediaTrivia";
 import { WatchProvidersDialog } from "@/components/media/WatchProvidersDialog";
+import { useAuth } from "@/context/auth-core";
 
 const MediaDetailsPage = () => {
   const { mediaType, id } = useParams<{ mediaType: "movie" | "tv", id: string }>();
@@ -44,6 +46,8 @@ const MediaDetailsPage = () => {
   });
   const { toast } = useToast();
   const { addItem, removeItem, isInWatchlist } = useWatchlistStore();
+  const { addItem: addLibraryItem, removeItem: removeLibraryItem, getItem, markMovieWatched } = useLibraryStore();
+  const { canAccess } = useAuth();
 
   /* Background Trailer State */
   const [showBackgroundTrailer, setShowBackgroundTrailer] = useState(false);
@@ -205,6 +209,71 @@ const MediaDetailsPage = () => {
   const handleShowSeasons = () => setShowSeasons(true);
   const handleShowGallery = () => setShowGallery(true);
 
+  const buildLibraryItem = (): LibraryItem | null => {
+    if (!media || !mediaType || !id) return null;
+    const now = new Date().toISOString();
+    const status: LibraryItem["status"] = mediaType === "tv" ? "watching" : "planned";
+    return {
+      id: Number(id),
+      media_type: mediaType,
+      title: media.title,
+      name: media.name,
+      poster_path: media.poster_path,
+      backdrop_path: media.backdrop_path,
+      release_date: media.release_date,
+      first_air_date: media.first_air_date,
+      status,
+      addedAt: now,
+      updatedAt: now
+    };
+  };
+
+  const handleToggleLibrary = async () => {
+    if (!mediaType || !id) return;
+    const existing = getItem(Number(id), mediaType);
+    if (existing) {
+      await removeLibraryItem(Number(id), mediaType);
+      toast({
+        title: "Rimosso dallo storico",
+        description: "Il contenuto è stato rimosso dal tuo storico personale."
+      });
+      return;
+    }
+    const item = buildLibraryItem();
+    if (!item) return;
+    await addLibraryItem(item);
+    toast({
+      title: "Aggiunto allo storico",
+      description: "Il contenuto è stato aggiunto al tuo storico personale."
+    });
+  };
+
+  const handleMarkWatched = async () => {
+    if (!mediaType || mediaType !== "movie" || !id) return;
+    const existing = getItem(Number(id), mediaType);
+    if (!existing) {
+      const now = new Date().toISOString();
+      await addLibraryItem({
+        id: Number(id),
+        media_type: "movie",
+        title: media?.title,
+        poster_path: media?.poster_path,
+        backdrop_path: media?.backdrop_path,
+        release_date: media?.release_date,
+        status: "completed",
+        addedAt: now,
+        updatedAt: now,
+        watchedAt: now
+      });
+    } else {
+      await markMovieWatched(Number(id));
+    }
+    toast({
+      title: "Segnato come visto",
+      description: "Il film è stato aggiornato nello storico."
+    });
+  };
+
   const handleViewActorDetails = (actorId: number) => {
     navigate(`/person/${actorId}`);
   };
@@ -316,6 +385,26 @@ const MediaDetailsPage = () => {
     ? media.credits?.crew?.find(person => person.job === "Director")
     : null;
   const creators = mediaType === "tv" ? media.created_by : null;
+  const nextEpisode = mediaType === "tv" ? media.next_episode_to_air : undefined;
+
+  const formatInfoDate = (value?: string) => {
+    if (!value) return "—";
+    return new Date(value).toLocaleDateString("it-IT", {
+      year: "numeric",
+      month: "long",
+      day: "numeric"
+    });
+  };
+
+  const tvInfoItems = mediaType === "tv" ? [
+    { label: "Prossimo episodio", value: nextEpisode?.air_date ? formatInfoDate(nextEpisode.air_date) : "—" },
+    { label: "Anno", value: releaseYear || "—" },
+    { label: "Stato", value: media.status || "—" },
+    { label: "Canale", value: media.networks?.[0]?.name || "—" },
+    { label: "Stagioni", value: media.number_of_seasons ? String(media.number_of_seasons) : "—" },
+    { label: "Episodi", value: media.number_of_episodes ? String(media.number_of_episodes) : "—" },
+    { label: "Voto", value: media.vote_average ? `${media.vote_average.toFixed(1)} (${media.vote_count})` : "—" }
+  ] : [];
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -383,12 +472,32 @@ const MediaDetailsPage = () => {
               onShowReviews={handleShowReviews}
               onShowSeasons={handleShowSeasons}
               onAddToWatchlist={handleAddToWatchlist}
+              onToggleLibrary={handleToggleLibrary}
+              onMarkWatched={handleMarkWatched}
               onShare={handleShare}
               onShowGallery={handleShowGallery}
               onShowTrivia={handleShowTrivia}
               mediaType={mediaType}
               isInWatchlist={id ? isInWatchlist(Number(id), mediaType) : false}
+              isInLibrary={id ? !!getItem(Number(id), mediaType) : false}
+              isLoggedIn={canAccess}
             />
+
+            {mediaType === "tv" && (
+              <div className="mb-8 space-y-6">
+                <div className="bg-secondary/20 rounded-lg p-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {tvInfoItems.map((item) => (
+                      <div key={item.label} className="text-sm">
+                        <div className="text-muted-foreground">{item.label}</div>
+                        <div className="font-semibold">{item.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <TvSeasons tvId={Number(id)} variant="inline" />
+              </div>
+            )}
 
             {/* Overview */}
             <div className="mb-8">
