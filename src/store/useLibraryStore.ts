@@ -36,6 +36,25 @@ interface LibraryState {
   syncWithCloud: () => Promise<void>;
 }
 
+const sanitizeValue = (value: unknown): unknown => {
+  if (value === undefined) return undefined;
+  if (Array.isArray(value)) {
+    return value.map(sanitizeValue).filter((item) => item !== undefined);
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .map(([key, val]) => [key, sanitizeValue(val)] as const)
+        .filter(([, val]) => val !== undefined)
+    );
+  }
+  return value;
+};
+
+const sanitizeItem = <T extends Record<string, unknown>>(item: T): T => {
+  return sanitizeValue(item) as T;
+};
+
 const nowIso = () => new Date().toISOString();
 
 const getUserStorageKey = () => {
@@ -63,7 +82,8 @@ const userStorage = createJSONStorage(() => ({
 const updateCloud = async (items: LibraryItem[]) => {
   if (!auth || !db || !auth.currentUser) return;
   const userRef = doc(db, "users", auth.currentUser.uid);
-  await setDoc(userRef, { library: items }, { merge: true });
+  const sanitizedItems = items.map((entry) => sanitizeItem(entry));
+  await setDoc(userRef, { library: sanitizedItems }, { merge: true });
 };
 
 export const useLibraryStore = create<LibraryState>()(
@@ -120,7 +140,8 @@ export const useLibraryStore = create<LibraryState>()(
           set({ items: newItems });
           if (auth && db && auth.currentUser) {
             const userRef = doc(db, "users", auth.currentUser.uid);
-            await updateDoc(userRef, { library: newItems });
+            const sanitizedItems = newItems.map((entry) => sanitizeItem(entry));
+            await updateDoc(userRef, { library: sanitizedItems });
           }
         },
 
@@ -236,10 +257,12 @@ export const useLibraryStore = create<LibraryState>()(
               const mergedItems = Array.from(mergedMap.values());
               set({ items: mergedItems });
               if (mergedItems.length > cloudItems.length) {
-                await setDoc(userRef, { library: mergedItems }, { merge: true });
+                const sanitizedItems = mergedItems.map((entry) => sanitizeItem(entry));
+                await setDoc(userRef, { library: sanitizedItems }, { merge: true });
               }
             } else if (get().items.length > 0) {
-              await setDoc(userRef, { library: get().items }, { merge: true });
+              const sanitizedItems = get().items.map((entry) => sanitizeItem(entry));
+              await setDoc(userRef, { library: sanitizedItems }, { merge: true });
             }
           } catch (error) {
             console.error("Sync library failed", error);

@@ -48,6 +48,10 @@ const Navbar = () => {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    const query = searchQuery.trim();
+    if (!query) return;
+    setIsSearchOpen(false);
+    navigate(`/search?q=${encodeURIComponent(query)}`);
   };
 
   useEffect(() => {
@@ -65,10 +69,9 @@ const Navbar = () => {
     const runSearch = async () => {
       setIsSearching(true);
       try {
-        const { movies, tvShows, people } = await tmdbApi.search(query, 1, { includePeople: true });
+        const { results } = await tmdbApi.search(query, 1, { includePeople: true });
         if (!isActive) return;
-        const combinedResults = [...movies, ...tvShows, ...people];
-        setSearchResults(combinedResults.slice(0, 10));
+        setSearchResults(results.slice(0, 10));
       } finally {
         if (isActive) {
           setIsSearching(false);

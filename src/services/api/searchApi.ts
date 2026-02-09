@@ -11,7 +11,7 @@ export const search = async (
   query: string,
   page: number = 1,
   options: SearchOptions = {}
-): Promise<{ movies: Movie[]; tvShows: TV[]; people: MediaItem[] }> => {
+): Promise<{ movies: Movie[]; tvShows: TV[]; people: MediaItem[]; results: MediaItem[] }> => {
   try {
     console.log(`Searching for: "${query}" on page ${page}`);
     const url = `${API_URL}/search/multi?language=it-IT&query=${encodeURIComponent(query)}&page=${page}`;
@@ -20,6 +20,7 @@ export const search = async (
 
     console.log(`Search results: ${data.results?.length || 0} items found`);
     
+    const results: MediaItem[] = [];
     const people: MediaItem[] = [];
     const movies: Movie[] = [];
     const tvShows: TV[] = [];
@@ -30,24 +31,30 @@ export const search = async (
     
     data.results.forEach((item: MediaItem) => {
       if (item.media_type === "movie") {
-        movies.push({
+        const movie = {
           ...item,
           media_type: "movie" as const
-        } as Movie);
+        } as Movie;
+        movies.push(movie);
+        results.push(movie);
       } else if (item.media_type === "tv") {
-        tvShows.push({
+        const tvShow = {
           ...item,
           media_type: "tv" as const
-        } as TV);
+        } as TV;
+        tvShows.push(tvShow);
+        results.push(tvShow);
       } else if (item.media_type === "person" && options.includePeople) {
-        people.push({
+        const person = {
           ...item,
           media_type: "person" as const
-        });
+        };
+        people.push(person);
+        results.push(person);
       }
     });
     
-    return { movies, tvShows, people };
+    return { movies, tvShows, people, results };
   } catch (error) {
     console.error("Failed to search content", error);
     
@@ -58,31 +65,38 @@ export const search = async (
       const tokenResponse = await fetchWithAccessToken(tokenEndpoint);
       const tokenData = await tokenResponse.json();
       
+      const results: MediaItem[] = [];
       const people: MediaItem[] = [];
       const movies: Movie[] = [];
       const tvShows: TV[] = [];
       
       tokenData.results?.forEach((item: MediaItem) => {
         if (item.media_type === "movie") {
-          movies.push({
+          const movie = {
             ...item,
             media_type: "movie" as const
-          } as Movie);
+          } as Movie;
+          movies.push(movie);
+          results.push(movie);
         } else if (item.media_type === "tv") {
-          tvShows.push({
+          const tvShow = {
             ...item,
             media_type: "tv" as const
-          } as TV);
+          } as TV;
+          tvShows.push(tvShow);
+          results.push(tvShow);
         } else if (item.media_type === "person" && options.includePeople) {
-          people.push({
+          const person = {
             ...item,
             media_type: "person" as const
-          });
+          };
+          people.push(person);
+          results.push(person);
         }
       });
       
       if (movies.length > 0 || tvShows.length > 0 || people.length > 0) {
-        return { movies, tvShows, people };
+        return { movies, tvShows, people, results };
       }
     } catch (tokenError) {
       console.error("Access token search also failed:", tokenError);
@@ -91,7 +105,8 @@ export const search = async (
     return { 
       movies: mockMovies as Movie[], 
       tvShows: mockTvShows as TV[],
-      people: []
+      people: [],
+      results: [...mockMovies, ...mockTvShows] as MediaItem[]
     };
   }
 };

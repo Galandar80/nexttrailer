@@ -16,6 +16,25 @@ interface WatchlistState {
     syncWithCloud: () => Promise<void>;
 }
 
+const sanitizeValue = (value: unknown): unknown => {
+    if (value === undefined) return undefined;
+    if (Array.isArray(value)) {
+        return value.map(sanitizeValue).filter((item) => item !== undefined);
+    }
+    if (value && typeof value === "object") {
+        return Object.fromEntries(
+            Object.entries(value as Record<string, unknown>)
+                .map(([key, val]) => [key, sanitizeValue(val)] as const)
+                .filter(([, val]) => val !== undefined)
+        );
+    }
+    return value;
+};
+
+const sanitizeItem = <T extends Record<string, unknown>>(item: T): T => {
+    return sanitizeValue(item) as T;
+};
+
 const getStoredItemsForUser = (uid: string) => {
     const raw = localStorage.getItem(`watchlist-storage-${uid}`);
     if (!raw) return [];
@@ -69,8 +88,9 @@ export const useWatchlistStore = create<WatchlistState>()(
                         if (auth && db && auth.currentUser) {
                             try {
                                 const userRef = doc(db, 'users', auth.currentUser.uid);
+                                const sanitizedItems = newItems.map((entry) => sanitizeItem(entry));
                                 // Using arrayUnion to avoid duplicates in DB
-                                await setDoc(userRef, { watchlist: newItems }, { merge: true });
+                                await setDoc(userRef, { watchlist: sanitizedItems }, { merge: true });
                             } catch (e) {
                                 console.error("Error adding to Firestore", e);
                             }
@@ -90,7 +110,8 @@ export const useWatchlistStore = create<WatchlistState>()(
                     if (auth && db && auth.currentUser) {
                         try {
                             const userRef = doc(db, 'users', auth.currentUser.uid);
-                            await updateDoc(userRef, { watchlist: newItems });
+                            const sanitizedItems = newItems.map((entry) => sanitizeItem(entry));
+                            await updateDoc(userRef, { watchlist: sanitizedItems });
                         } catch (e) {
                             console.error("Error removing from Firestore", e);
                         }
@@ -138,11 +159,13 @@ export const useWatchlistStore = create<WatchlistState>()(
 
                             // Update cloud with merged result
                             if (mergedItems.length > cloudItems.length) {
-                                await setDoc(userRef, { watchlist: mergedItems }, { merge: true });
+                                const sanitizedItems = mergedItems.map((entry) => sanitizeItem(entry));
+                                await setDoc(userRef, { watchlist: sanitizedItems }, { merge: true });
                             }
                         } else if (get().items.length > 0) {
                             // First time sync, push local to cloud
-                            await setDoc(userRef, { watchlist: get().items }, { merge: true });
+                            const sanitizedItems = get().items.map((entry) => sanitizeItem(entry));
+                            await setDoc(userRef, { watchlist: sanitizedItems }, { merge: true });
                         }
                     } catch (e) {
                         console.error("Sync watchlist failed", e);

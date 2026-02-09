@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SEO } from "@/components/SEO";
 import { Badge } from "@/components/ui/badge";
+import { useSearchParams } from "react-router-dom";
 import {
   Select,
   SelectContent,
@@ -18,6 +19,7 @@ import {
 } from "@/components/ui/select";
 
 const Search = () => {
+  const [searchParams] = useSearchParams();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<MediaItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -46,14 +48,15 @@ const Search = () => {
     loadGenres();
   }, [mediaType]);
 
-  const handleSearch = React.useCallback(async (e?: React.FormEvent) => {
+  const handleSearch = React.useCallback(async (e?: React.FormEvent, overrideQuery?: string) => {
     if (e) e.preventDefault();
+    const activeQuery = typeof overrideQuery === "string" ? overrideQuery : query;
 
     // Logic: 
     // 1. If query is present, use search API (primary)
     // 2. If query is empty but filters are set, use discover API
 
-    if (!query.trim() && !showFilters) return;
+    if (!activeQuery.trim() && !showFilters) return;
 
     setIsSearching(true);
     setResults([]);
@@ -61,18 +64,13 @@ const Search = () => {
     try {
       let data: MediaItem[] = [];
 
-      if (query.trim()) {
+      if (activeQuery.trim()) {
         // Text Search
         // Note: TMDB search/multi doesn't support easy filtering by genre/year mixed with text
         // So we just search by text. 
         // Improvement: We could client-side filter if the result set was huge, but for now simple search.
-        const searchResults = await tmdbApi.search(query);
-        const combinedResults = [...searchResults.movies, ...searchResults.tvShows];
-        data = combinedResults.filter(item => {
-          if (mediaType === 'movie' && item.media_type === 'tv') return false;
-          if (mediaType === 'tv' && item.media_type === 'movie') return false;
-          return true;
-        });
+        const searchResults = await tmdbApi.search(activeQuery, 1, { includePeople: true });
+        data = searchResults.results;
       } else {
         // Discover (Filter) Search
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -100,6 +98,14 @@ const Search = () => {
       setIsSearching(false);
     }
   }, [query, showFilters, mediaType, selectedGenre, selectedYear]);
+
+  useEffect(() => {
+    const urlQuery = searchParams.get("q") || "";
+    if (urlQuery && urlQuery !== query) {
+      setQuery(urlQuery);
+      handleSearch(undefined, urlQuery);
+    }
+  }, [searchParams, handleSearch, query]);
 
   // Trigger search when filters change (if query is empty)
   useEffect(() => {
