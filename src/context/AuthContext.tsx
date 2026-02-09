@@ -9,7 +9,11 @@ import {
     signInWithEmailAndPassword,
     sendEmailVerification,
     sendPasswordResetEmail,
-    updateProfile
+    updateProfile,
+    updateEmail,
+    updatePassword,
+    EmailAuthProvider,
+    reauthenticateWithCredential
 } from 'firebase/auth';
 import { auth, isFirebaseEnabled } from '../services/firebase';
 import { AuthContext } from './auth-core';
@@ -118,6 +122,65 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
     };
 
+    const updateUserProfile = async (displayName: string) => {
+        if (!isFirebaseEnabled || !auth || !auth.currentUser) {
+            throw new Error("Firebase non configurato");
+        }
+        if (!displayName.trim()) {
+            throw new Error("Nome utente non valido");
+        }
+        try {
+            await updateProfile(auth.currentUser, { displayName: displayName.trim() });
+            setUser(auth.currentUser);
+        } catch (error) {
+            console.error("Error updating profile", error);
+            throw error;
+        }
+    };
+
+    const updateUserEmail = async (email: string, currentPassword: string) => {
+        if (!isFirebaseEnabled || !auth || !auth.currentUser) {
+            throw new Error("Firebase non configurato");
+        }
+        if (!email.trim() || !currentPassword) {
+            throw new Error("Compila tutti i campi");
+        }
+        const hasPasswordProvider = auth.currentUser.providerData.some((provider) => provider.providerId === "password");
+        if (!hasPasswordProvider) {
+            throw new Error("Operazione disponibile solo per account email/password");
+        }
+        try {
+            const credential = EmailAuthProvider.credential(auth.currentUser.email || "", currentPassword);
+            await reauthenticateWithCredential(auth.currentUser, credential);
+            await updateEmail(auth.currentUser, email.trim());
+            setUser(auth.currentUser);
+        } catch (error) {
+            console.error("Error updating email", error);
+            throw error;
+        }
+    };
+
+    const updateUserPassword = async (currentPassword: string, newPassword: string) => {
+        if (!isFirebaseEnabled || !auth || !auth.currentUser) {
+            throw new Error("Firebase non configurato");
+        }
+        if (!currentPassword || !newPassword) {
+            throw new Error("Compila tutti i campi");
+        }
+        const hasPasswordProvider = auth.currentUser.providerData.some((provider) => provider.providerId === "password");
+        if (!hasPasswordProvider) {
+            throw new Error("Operazione disponibile solo per account email/password");
+        }
+        try {
+            const credential = EmailAuthProvider.credential(auth.currentUser.email || "", currentPassword);
+            await reauthenticateWithCredential(auth.currentUser, credential);
+            await updatePassword(auth.currentUser, newPassword);
+        } catch (error) {
+            console.error("Error updating password", error);
+            throw error;
+        }
+    };
+
     const logout = async () => {
         if (!isFirebaseEnabled || !auth) {
             throw new Error("Firebase non configurato");
@@ -131,7 +194,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, loading, canAccess, signInWithGoogle, signInWithEmail, signUpWithEmail, sendVerificationEmail: sendVerificationEmailToUser, resendVerificationWithEmail, resetPassword, logout }}>
+        <AuthContext.Provider value={{ user, loading, canAccess, signInWithGoogle, signInWithEmail, signUpWithEmail, sendVerificationEmail: sendVerificationEmailToUser, resendVerificationWithEmail, resetPassword, updateUserProfile, updateUserEmail, updateUserPassword, logout }}>
             {!loading && children}
         </AuthContext.Provider>
     );

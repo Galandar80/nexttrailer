@@ -391,6 +391,9 @@ const Navbar = () => {
                     <DropdownMenuItem onClick={() => navigate('/storico')}>
                       Storico
                     </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate('/preferenze')}>
+                      Preferenze
+                    </DropdownMenuItem>
                   </>
                 ) : (
                   <>

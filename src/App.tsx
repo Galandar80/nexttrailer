@@ -24,6 +24,7 @@ const Watchlist = lazy(() => import("./pages/Watchlist"));
 const Library = lazy(() => import("./pages/Library"));
 const PersonDetails = lazy(() => import("./pages/PersonDetails"));
 const Oscar = lazy(() => import("./pages/Oscar"));
+const Preferences = lazy(() => import("./pages/Preferences"));
 
 // Configurazione di React Query per gestire meglio le richieste API
 const queryClient = new QueryClient({
@@ -82,6 +83,7 @@ const App = () => {
                     <Route path="/oscar" element={<Oscar />} />
                     <Route path="/watchlist" element={<Watchlist />} />
                     <Route path="/storico" element={<Library />} />
+                    <Route path="/preferenze" element={<Preferences />} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </Suspense>
