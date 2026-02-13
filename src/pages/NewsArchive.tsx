@@ -46,6 +46,15 @@ const normalizeStoredArticles = (items: NewsArticle[]) => {
   }).filter((item) => item.id);
 };
 
+const isWikipediaImage = (url?: string) => {
+  if (!url) return false;
+  return url.includes("wikipedia.org") || url.includes("wikimedia.org");
+};
+
+const stripWikipediaImages = (items: NewsArticle[]) => {
+  return items.map((item) => (isWikipediaImage(item.imageUrl) ? { ...item, imageUrl: "" } : item));
+};
+
 const NewsArchive = () => {
   const { toast } = useToast();
   const [articles, setArticles] = useState<NewsArticle[]>([]);
@@ -57,9 +66,15 @@ const NewsArchive = () => {
   const [monthFilter, setMonthFilter] = useState("");
 
   const loadInitialArticles = useCallback(async () => {
-    const storedNews = normalizeStoredArticles(parseStoredArticles(localStorage.getItem(STORAGE_KEY)));
-    const storedComing = normalizeStoredArticles(parseStoredArticles(localStorage.getItem(COMINGSOON_STORAGE_KEY)));
+    const storedNews = stripWikipediaImages(
+      normalizeStoredArticles(parseStoredArticles(localStorage.getItem(STORAGE_KEY)))
+    );
+    const storedComing = stripWikipediaImages(
+      normalizeStoredArticles(parseStoredArticles(localStorage.getItem(COMINGSOON_STORAGE_KEY)))
+    );
     const stored = [...storedNews, ...storedComing];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(storedNews));
+    localStorage.setItem(COMINGSOON_STORAGE_KEY, JSON.stringify(storedComing));
     setIsLoading(true);
     if (!isFirebaseEnabled || !db) {
       const sorted = [...stored].sort((a, b) => b.publishedAtTs - a.publishedAtTs);
@@ -74,19 +89,19 @@ const NewsArchive = () => {
         getDocs(query(collection(db, "news_articles"), orderBy("publishedAtTs", "desc"), limit(MAX_ARCHIVE))),
         getDocs(query(collection(db, "news_comingsoon"), orderBy("publishedAtTs", "desc"), limit(MAX_ARCHIVE)))
       ]);
-      const fetchedNews = newsSnapshot.docs.map((entry) => {
+      const fetchedNews = stripWikipediaImages(newsSnapshot.docs.map((entry) => {
         const data = entry.data() as NewsArticle;
         return { ...data, id: data.id || entry.id };
-      });
-      const fetchedComing = comingSnapshot.docs.map((entry) => {
+      }));
+      const fetchedComing = stripWikipediaImages(comingSnapshot.docs.map((entry) => {
         const data = entry.data() as NewsArticle;
         return { ...data, id: data.id || entry.id };
-      });
+      }));
       const fetchedNewsIds = new Set(fetchedNews.map((item) => item.id));
       const fetchedComingIds = new Set(fetchedComing.map((item) => item.id));
-      const mergedNews = [...fetchedNews, ...storedNews.filter((item) => !fetchedNewsIds.has(item.id))];
-      const mergedComing = [...fetchedComing, ...storedComing.filter((item) => !fetchedComingIds.has(item.id))];
-      const merged = [...mergedNews, ...mergedComing].sort((a, b) => b.publishedAtTs - a.publishedAtTs);
+      const mergedNews = stripWikipediaImages([...fetchedNews, ...storedNews.filter((item) => !fetchedNewsIds.has(item.id))]);
+      const mergedComing = stripWikipediaImages([...fetchedComing, ...storedComing.filter((item) => !fetchedComingIds.has(item.id))]);
+      const merged = stripWikipediaImages([...mergedNews, ...mergedComing]).sort((a, b) => b.publishedAtTs - a.publishedAtTs);
       setArticles(merged.slice(0, PAGE_SIZE));
       setLocalAllArticles(merged);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedNews));
