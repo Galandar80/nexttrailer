@@ -43,6 +43,7 @@ const Navbar = () => {
   const [registerEmail, setRegisterEmail] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
+  const [isNewsMenuOpen, setIsNewsMenuOpen] = useState(false);
   const watchlistCount = items.length;
   const libraryCount = libraryItems.length;
 
@@ -234,12 +235,26 @@ const Navbar = () => {
             >
               Home
             </Link>
-            <Link
-              to="/news"
-              className={`transition-colors ${isNewsActive ? 'text-accent font-medium' : 'hover:text-accent font-medium'}`}
-            >
-              News
-            </Link>
+            <div onMouseEnter={() => setIsNewsMenuOpen(true)} onMouseLeave={() => setIsNewsMenuOpen(false)}>
+              <DropdownMenu open={isNewsMenuOpen} onOpenChange={setIsNewsMenuOpen}>
+                <DropdownMenuTrigger asChild>
+                  <Link
+                    to="/news"
+                    className={`transition-colors ${isNewsActive ? 'text-accent font-medium' : 'hover:text-accent font-medium'}`}
+                  >
+                    News
+                  </Link>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem asChild>
+                    <Link to="/news">News</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/news/archivio">Archivio news</Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
             <Link
               to="/catalogo"
               className={`transition-colors ${isActive('/catalogo') ? 'text-accent font-medium' : 'hover:text-accent font-medium'}`}

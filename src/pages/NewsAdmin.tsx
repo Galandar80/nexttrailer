@@ -40,6 +40,7 @@ const NewsAdmin = () => {
   const [editSubtitle, setEditSubtitle] = useState("");
   const [editBody, setEditBody] = useState("");
   const [editBullets, setEditBullets] = useState("");
+  const isSuperAdmin = user?.email?.toLowerCase() === "calisma82@gmail.com";
 
   const loadArticles = useCallback(async () => {
     if (!isFirebaseEnabled || !db) {
@@ -65,10 +66,10 @@ const NewsAdmin = () => {
   }, []);
 
   useEffect(() => {
-    if (user && canAccess) {
+    if (user && canAccess && isSuperAdmin) {
       loadArticles();
     }
-  }, [user, canAccess, loadArticles]);
+  }, [user, canAccess, isSuperAdmin, loadArticles]);
 
   const handleDelete = async (id: string) => {
     if (!isFirebaseEnabled || !db) {
@@ -172,11 +173,15 @@ const NewsAdmin = () => {
           <div className="text-muted-foreground">Completa la verifica email per gestire le news.</div>
         )}
 
+        {user && canAccess && !isSuperAdmin && (
+          <div className="text-muted-foreground">Non hai i permessi per gestire le news.</div>
+        )}
+
         {error && (
           <div className="text-sm text-red-500">{error}</div>
         )}
 
-        {user && canAccess && (
+        {user && canAccess && isSuperAdmin && (
           <div className="grid gap-4">
             {articles.length === 0 && !isLoading ? (
               <div className="text-muted-foreground">Nessuna news disponibile.</div>

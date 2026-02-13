@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Newspaper } from "lucide-react";
-import { collection, doc, getDoc, getDocs, limit, orderBy, query, setDoc } from "firebase/firestore";
+import { QueryDocumentSnapshot, collection, doc, getDoc, getDocs, limit, orderBy, query, setDoc, startAfter } from "firebase/firestore";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,7 @@ const DEFAULT_FEED_URL = "https://www.bestmovie.it/feed/";
 const COMINGSOON_FEED_URL = "https://www.comingsoon.it/feedrss/cinema";
 const MAX_ARTICLES = 3;
 const MAX_COMINGSOON = 6;
+const PAGE_SIZE = 12;
 const AUTO_REFRESH_MS = 1000 * 60 * 60 * 6;
 
 const normalizeText = (value: string) => value.replace(/\s+/g, " ").trim();
@@ -123,6 +124,7 @@ const buildPrompt = (item: RawRssItem) => {
     "Riscrivi l'articolo in italiano con parole e struttura diverse dall'originale.",
     "Non copiare frasi identiche, evita clickbait e non inventare fatti.",
     "Il titolo deve essere diverso dall'originale.",
+    "Il body deve avere tra 250 e 350 parole (circa 5-8 paragrafi brevi).",
     "Restituisci solo JSON con le chiavi: title, subtitle, body, bullets.",
     "bullets deve essere un array di 3 punti chiave, frasi brevi.",
     "",
@@ -218,43 +220,61 @@ const News = () => {
   const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [topArticles, setTopArticles] = useState<NewsArticle[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
   const [autoRefreshDone, setAutoRefreshDone] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot | null>(null);
+  const [localAllArticles, setLocalAllArticles] = useState<NewsArticle[]>([]);
+  const isSuperAdmin = user?.email?.toLowerCase() === "calisma82@gmail.com";
 
   const feedUrl = useMemo(() => {
     return (import.meta.env.VITE_NEWS_RSS_URL as string | undefined) || DEFAULT_FEED_URL;
   }, []);
 
-  useEffect(() => {
-    const loadArticles = async () => {
-      const stored = normalizeStoredArticles(parseStoredArticles(localStorage.getItem(STORAGE_KEY)));
-      if (!isFirebaseEnabled || !db) {
-        if (stored.length > 0) {
-          setArticles(stored);
-        }
-        return;
+  const loadInitialArticles = useCallback(async (skipLoading = false) => {
+    const stored = normalizeStoredArticles(parseStoredArticles(localStorage.getItem(STORAGE_KEY)));
+    if (!skipLoading) {
+      setIsLoading(true);
+    }
+    setLastError(null);
+    if (!isFirebaseEnabled || !db) {
+      setLocalAllArticles(stored);
+      setArticles(stored.slice(0, PAGE_SIZE));
+      setHasMore(stored.length > PAGE_SIZE);
+      if (!skipLoading) {
+        setIsLoading(false);
       }
-      try {
-        const newsQuery = query(collection(db, "news_articles"), orderBy("publishedAtTs", "desc"), limit(30));
-        const snapshot = await getDocs(newsQuery);
-        const fetched = snapshot.docs.map((entry) => {
-          const data = entry.data() as NewsArticle;
-          return { ...data, id: data.id || entry.id };
-        });
-        if (fetched.length > 0) {
-          setArticles(fetched);
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(fetched));
-        } else if (stored.length > 0) {
-          setArticles(stored);
-        }
-      } catch {
-        if (stored.length > 0) {
-          setArticles(stored);
-        }
+      return;
+    }
+    try {
+      const newsQuery = query(collection(db, "news_articles"), orderBy("publishedAtTs", "desc"), limit(PAGE_SIZE));
+      const snapshot = await getDocs(newsQuery);
+      const fetched = snapshot.docs.map((entry) => {
+        const data = entry.data() as NewsArticle;
+        return { ...data, id: data.id || entry.id };
+      });
+      const fetchedIds = new Set(fetched.map((item) => item.id));
+      const merged = [...fetched, ...stored.filter((item) => !fetchedIds.has(item.id))];
+      setArticles(fetched);
+      setLocalAllArticles(merged);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
+      setHasMore(snapshot.docs.length === PAGE_SIZE);
+    } catch {
+      setLocalAllArticles(stored);
+      setArticles(stored.slice(0, PAGE_SIZE));
+      setHasMore(stored.length > PAGE_SIZE);
+    } finally {
+      if (!skipLoading) {
+        setIsLoading(false);
       }
-    };
-    loadArticles();
+    }
   }, []);
+
+  useEffect(() => {
+    loadInitialArticles();
+  }, [loadInitialArticles]);
 
   useEffect(() => {
     const loadTopArticles = async () => {
@@ -409,11 +429,14 @@ const News = () => {
         ...refreshed,
         ...cachedArticles.filter((article) => !refreshedIds.has(article.id))
       ];
-      setArticles(merged);
+      setLocalAllArticles(merged);
+      setArticles(merged.slice(0, PAGE_SIZE));
+      setHasMore(merged.length > PAGE_SIZE);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
       if (isFirebaseEnabled && db) {
         const metaRef = doc(db, "news_meta", "global");
         await setDoc(metaRef, { lastRefreshAt: Date.now() }, { merge: true });
+        await loadInitialArticles(true);
       }
       toast({ title: "News aggiornate" });
     } catch (error) {
@@ -423,7 +446,59 @@ const News = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [feedUrl, toast]);
+  }, [feedUrl, loadInitialArticles, toast]);
+
+  const handleLoadMore = useCallback(async () => {
+    if (isLoadingMore) return;
+    if (!isFirebaseEnabled || !db) {
+      const next = localAllArticles.slice(0, articles.length + PAGE_SIZE);
+      setArticles(next);
+      setHasMore(localAllArticles.length > next.length);
+      return;
+    }
+    if (!lastDoc) {
+      setHasMore(false);
+      return;
+    }
+    setIsLoadingMore(true);
+    try {
+      const newsQuery = query(
+        collection(db, "news_articles"),
+        orderBy("publishedAtTs", "desc"),
+        startAfter(lastDoc),
+        limit(PAGE_SIZE)
+      );
+      const snapshot = await getDocs(newsQuery);
+      const fetched = snapshot.docs.map((entry) => {
+        const data = entry.data() as NewsArticle;
+        return { ...data, id: data.id || entry.id };
+      });
+      if (fetched.length > 0) {
+        setArticles((prev) => [...prev, ...fetched]);
+        setLocalAllArticles((prev) => {
+          const existingIds = new Set(prev.map((item) => item.id));
+          const merged = [...prev];
+          for (const item of fetched) {
+            if (!existingIds.has(item.id)) {
+              merged.push(item);
+            }
+          }
+          return merged.sort((a, b) => b.publishedAtTs - a.publishedAtTs);
+        });
+        const stored = normalizeStoredArticles(parseStoredArticles(localStorage.getItem(STORAGE_KEY)));
+        const storedIds = new Set(stored.map((item) => item.id));
+        const mergedStored = [...stored, ...fetched.filter((item) => !storedIds.has(item.id))];
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedStored));
+      }
+      setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
+      setHasMore(snapshot.docs.length === PAGE_SIZE);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Errore caricamento altre news";
+      toast({ title: message, variant: "destructive" });
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [articles.length, isLoadingMore, lastDoc, localAllArticles, toast]);
 
   useEffect(() => {
     const autoRefresh = async () => {
@@ -453,18 +528,20 @@ const News = () => {
         <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-3xl font-poster mb-2">News</h1>
-            <p className="text-muted-foreground">Articoli rielaborati da feed RSS.</p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Button className="bg-accent hover:bg-accent/90" onClick={handleRefresh} disabled={isLoading}>
-              {isLoading ? "Aggiornamento..." : "Aggiorna da RSS"}
+            <Button asChild variant="outline">
+              <Link to="/news/archivio">Archivio news</Link>
             </Button>
-            {user && (
+          </div>
+          {isSuperAdmin && (
+            <div className="flex flex-wrap gap-3">
+              <Button className="bg-accent hover:bg-accent/90" onClick={handleRefresh} disabled={isLoading}>
+                {isLoading ? "Aggiornamento..." : "Aggiorna da RSS"}
+              </Button>
               <Button asChild variant="outline">
                 <Link to="/news/admin">Gestisci news</Link>
               </Button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {topArticles.length > 0 && (
@@ -533,39 +610,48 @@ const News = () => {
           {articles.length === 0 && !isLoading ? (
             <div className="text-muted-foreground">Nessuna news disponibile.</div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {articles.map((article) => (
-                <Card key={article.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                  <div className="h-48 overflow-hidden">
-                    {article.imageUrl ? (
-                      <img
-                        src={article.imageUrl}
-                        alt={article.title}
-                        className="w-full h-full object-cover transition-transform hover:scale-105"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-secondary/40" />
-                    )}
-                  </div>
-                  <CardContent className="p-4">
-                    <h3 className="font-medium text-lg mb-2 line-clamp-2">{article.title}</h3>
-                    <p className="text-muted-foreground text-sm mb-3 line-clamp-2">
-                      {article.subtitle || article.body || "Nessuna descrizione disponibile."}
-                    </p>
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-muted-foreground">
-                        {article.publishedAt
-                          ? new Date(article.publishedAt).toLocaleDateString("it-IT", { day: "2-digit", month: "long", year: "numeric" })
-                          : ""}
-                      </span>
-                      <Button asChild variant="link" className="text-accent">
-                        <Link to={`/news/article?article=${encodeURIComponent(article.id)}`}>Leggi tutto</Link>
-                      </Button>
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {articles.map((article) => (
+                  <Card key={article.id} className="overflow-hidden hover:shadow-lg transition-shadow">
+                    <div className="h-48 overflow-hidden">
+                      {article.imageUrl ? (
+                        <img
+                          src={article.imageUrl}
+                          alt={article.title}
+                          className="w-full h-full object-cover transition-transform hover:scale-105"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-secondary/40" />
+                      )}
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                    <CardContent className="p-4">
+                      <h3 className="font-medium text-lg mb-2 line-clamp-2">{article.title}</h3>
+                      <p className="text-muted-foreground text-sm mb-3 line-clamp-2">
+                        {article.subtitle || article.body || "Nessuna descrizione disponibile."}
+                      </p>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-muted-foreground">
+                          {article.publishedAt
+                            ? new Date(article.publishedAt).toLocaleDateString("it-IT", { day: "2-digit", month: "long", year: "numeric" })
+                            : ""}
+                        </span>
+                        <Button asChild variant="link" className="text-accent">
+                          <Link to={`/news/article?article=${encodeURIComponent(article.id)}`}>Leggi tutto</Link>
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+              {hasMore && (
+                <div className="mt-8 text-center">
+                  <Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>
+                    {isLoadingMore ? "Caricamento..." : "Carica altri"}
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </section>
       </main>

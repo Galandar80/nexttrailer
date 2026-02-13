@@ -28,6 +28,7 @@ const Preferences = lazy(() => import("./pages/Preferences"));
 const News = lazy(() => import("./pages/News"));
 const NewsArticle = lazy(() => import("./pages/NewsArticle"));
 const NewsAdmin = lazy(() => import("./pages/NewsAdmin"));
+const NewsArchive = lazy(() => import("./pages/NewsArchive"));
 
 // Configurazione di React Query per gestire meglio le richieste API
 const queryClient = new QueryClient({
@@ -85,6 +86,7 @@ const App = () => {
                     <Route path="/tv" element={<TvSeries />} />
                     <Route path="/oscar" element={<Oscar />} />
                     <Route path="/news/admin" element={<NewsAdmin />} />
+                    <Route path="/news/archivio" element={<NewsArchive />} />
                     <Route path="/news/article" element={<NewsArticle />} />
                     <Route path="/news/:id" element={<NewsArticle />} />
                     <Route path="/news" element={<News />} />
