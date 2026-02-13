@@ -80,10 +80,6 @@ const NewsArticlePage = () => {
 
   const shareTitle = article?.title || "News";
   const canNativeShare = typeof navigator !== "undefined" && !!navigator.share;
-  const shareText = `${shareTitle}${shareUrl ? ` - ${shareUrl}` : ""}`;
-  const encodedUrl = encodeURIComponent(shareUrl);
-  const encodedTitle = encodeURIComponent(shareTitle);
-  const encodedText = encodeURIComponent(shareText);
   const seoImage = article?.imageUrl || "/og-image.png";
 
   const seoDescription = useMemo(() => {
@@ -92,6 +88,29 @@ const NewsArticlePage = () => {
     const cleaned = article.body.replace(/\s+/g, " ").trim();
     return cleaned.length > 160 ? `${cleaned.slice(0, 157)}...` : cleaned;
   }, [article]);
+
+  const shareImage = useMemo(() => {
+    if (typeof window === "undefined") return seoImage;
+    const origin = window.location.origin;
+    return seoImage.startsWith("http") ? seoImage : `${origin}${seoImage}`;
+  }, [seoImage]);
+
+  const shareMetaUrl = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    const origin = window.location.origin;
+    const params = new URLSearchParams();
+    params.set("title", shareTitle);
+    params.set("description", seoDescription);
+    params.set("image", shareImage);
+    params.set("url", shareUrl);
+    return `${origin}/api/share/news?${params.toString()}`;
+  }, [seoDescription, shareImage, shareTitle, shareUrl]);
+
+  const shareTargetUrl = shareMetaUrl || shareUrl;
+  const shareText = `${shareTitle}${shareTargetUrl ? ` - ${shareTargetUrl}` : ""}`;
+  const encodedUrl = encodeURIComponent(shareTargetUrl);
+  const encodedTitle = encodeURIComponent(shareTitle);
+  const encodedText = encodeURIComponent(shareText);
 
   const publishedIso = useMemo(() => {
     if (!article?.publishedAt) return "";
@@ -133,7 +152,7 @@ const NewsArticlePage = () => {
   const handleNativeShare = async () => {
     if (!shareUrl || !canNativeShare) return;
     try {
-      await navigator.share({ title: shareTitle, text: shareTitle, url: shareUrl });
+      await navigator.share({ title: shareTitle, text: shareTitle, url: shareTargetUrl });
     } catch {
       return;
     }
