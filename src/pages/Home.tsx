@@ -82,7 +82,7 @@ const Home = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <SEO title="NextTrailer" description="Calendario episodi, storico e consigli per film e serie TV." />
+      <SEO title="NextTrailer" description="Scopri film e serie, organizza la visione e non perdere nessuna uscita." />
       <Navbar />
 
       {isLoading ? (
@@ -104,33 +104,33 @@ const Home = () => {
       ) : (
         <main className="flex flex-col gap-16">
           <section className="relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-accent/20 via-background to-background" />
+            <div className="absolute inset-0 bg-gradient-to-br from-accent/25 via-background to-background" />
             <div className="absolute -top-28 -right-20 h-72 w-72 rounded-full bg-accent/20 blur-3xl" />
             <div className="absolute -bottom-32 -left-16 h-72 w-72 rounded-full bg-purple-500/20 blur-3xl" />
             <div className="relative max-w-screen-2xl mx-auto px-4 md:px-8 pt-16 pb-12">
               <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] items-center">
                 <div className="space-y-6">
-                  <Badge variant="secondary" className="w-fit">IL TUO CALENDARIO SERIE TV</Badge>
+                  <Badge variant="secondary" className="w-fit">LA HOME DELLA TUA VISIONE</Badge>
                   <h1 className="text-4xl md:text-6xl font-bold">
-                    Tieni il passo con film e serie, senza perdere neanche un episodio.
+                    Un unico posto per scoprire, seguire e ricordare tutto ciò che guardi.
                   </h1>
                   <p className="text-base md:text-lg text-muted-foreground max-w-2xl">
-                    NextTrailer ti aiuta a capire cosa guardare, quando esce il prossimo episodio
-                    e dove ritrovare tutto il tuo storico. Un unico posto, semplice e veloce.
+                    NextTrailer è la tua regia personale: notizie, trailer, calendario episodi,
+                    storico e consigli su misura. Semplice, veloce, pensato per chi ama film e serie.
                   </p>
                   <div className="flex flex-wrap gap-3">
-                    <Button onClick={() => navigate("/tv")} className="bg-accent hover:bg-accent/90">
-                      Scopri le serie TV
+                    <Button onClick={() => navigate("/storico")} className="bg-accent hover:bg-accent/90">
+                      Crea account gratuito
                     </Button>
-                    <Button variant="outline" onClick={() => navigate("/movies")}>
-                      Esplora i film
+                    <Button variant="outline" onClick={() => navigate("/catalogo")}>
+                      Esplora il catalogo
                     </Button>
                   </div>
                   <div className="grid gap-3 md:grid-cols-3">
                     {[
-                      "Calendario episodi sempre aggiornato",
-                      "Storico personale e sincronizzato",
-                      "Consigli su misura per i tuoi gusti"
+                      "Calendario episodi personalizzato",
+                      "Watchlist e storico sincronizzati",
+                      "Suggerimenti e news sempre aggiornati"
                     ].map((feature) => (
                       <div key={feature} className="flex items-start gap-2 text-sm text-muted-foreground">
                         <CheckCircle2 className="h-4 w-4 text-accent mt-0.5" />
@@ -143,7 +143,7 @@ const Home = () => {
                   <CardContent className="p-6 space-y-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm text-muted-foreground">Calendario interattivo</p>
+                        <p className="text-sm text-muted-foreground">Calendario episodi</p>
                         <h2 className="text-2xl font-semibold">Febbraio</h2>
                       </div>
                       <div className="flex items-center gap-2 text-muted-foreground">
@@ -174,19 +174,35 @@ const Home = () => {
             </div>
           </section>
 
-          <section className="max-w-screen-2xl mx-auto px-4 md:px-8">
-            <div className="grid gap-6 md:grid-cols-3">
+          <section className="max-w-screen-2xl mx-auto px-4 md:px-8 grid gap-8 lg:grid-cols-[1fr_1fr] items-start">
+            <div className="space-y-4">
+              <Badge variant="outline" className="w-fit">COS’È NEXTTRAILER</Badge>
+              <h2 className="text-3xl md:text-4xl font-bold">La tua cabina di regia per cinema e serie TV.</h2>
+              <p className="text-muted-foreground">
+                Raccogli tutto in un unico spazio: trailer, news, consigli e un calendario
+                chiaro per non perdere le uscite. Ideale se guardi contenuti su più piattaforme
+                e vuoi avere sempre il controllo.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <Button variant="default" onClick={() => navigate("/search")}>
+                  Inizia a cercare
+                </Button>
+                <Button variant="outline" onClick={() => navigate("/news")}>
+                  Leggi le news
+                </Button>
+              </div>
+            </div>
+            <div className="grid gap-6 md:grid-cols-2">
               <Card className="bg-secondary/20 border-muted/40">
                 <CardContent className="p-6 space-y-3">
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 rounded-full bg-accent/20 flex items-center justify-center">
                       <CalendarDays className="h-5 w-5 text-accent" />
                     </div>
-                    <h3 className="text-lg font-semibold">Calendario degli episodi</h3>
+                    <h3 className="text-lg font-semibold">Calendario intelligente</h3>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Aggiungi le tue serie e visualizza tutte le uscite in un calendario
-                    chiaro, così sai sempre cosa sta per arrivare.
+                    Un’agenda sempre aggiornata con gli episodi e le uscite che ti interessano davvero.
                   </p>
                 </CardContent>
               </Card>
@@ -196,11 +212,10 @@ const Home = () => {
                     <div className="h-10 w-10 rounded-full bg-accent/20 flex items-center justify-center">
                       <Sparkles className="h-5 w-5 text-accent" />
                     </div>
-                    <h3 className="text-lg font-semibold">Tutto gratuito</h3>
+                    <h3 className="text-lg font-semibold">Scoperte continue</h3>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Nessun abbonamento o paywall: le funzioni principali sono
-                    sempre disponibili per tutti.
+                    Trailer e suggerimenti mirati per trovare subito cosa guardare stasera.
                   </p>
                 </CardContent>
               </Card>
@@ -210,83 +225,80 @@ const Home = () => {
                     <div className="h-10 w-10 rounded-full bg-accent/20 flex items-center justify-center">
                       <Rocket className="h-5 w-5 text-accent" />
                     </div>
-                    <h3 className="text-lg font-semibold">In costante evoluzione</h3>
+                    <h3 className="text-lg font-semibold">Tutto in un solo posto</h3>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Nuove funzioni arrivano spesso: suggerimenti personalizzati,
-                    notifiche e strumenti per migliorare la tua esperienza.
+                    Niente fogli di appunti o note sparse: organizza la visione in un click.
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className="bg-secondary/20 border-muted/40">
+                <CardContent className="p-6 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-accent/20 flex items-center justify-center">
+                      <ShieldCheck className="h-5 w-5 text-accent" />
+                    </div>
+                    <h3 className="text-lg font-semibold">Privacy al centro</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    I tuoi dati servono solo per sincronizzare le tue liste e migliorare la tua esperienza.
                   </p>
                 </CardContent>
               </Card>
             </div>
           </section>
 
-          <section className="max-w-screen-2xl mx-auto px-4 md:px-8 grid gap-10 lg:grid-cols-[1fr_1fr] items-start">
-            <div className="space-y-4">
-              <Badge variant="outline" className="w-fit">PERFETTO PER TE</Badge>
-              <h2 className="text-3xl font-bold">Guardi serie su più piattaforme?</h2>
-              <p className="text-muted-foreground">
-                Con NextTrailer non devi più segnarti episodi e date a mano. Ti basta
-                salvare una serie e ti ricordiamo dove eri rimasto.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <Button variant="default" onClick={() => navigate("/search")}>
-                  Cerca una serie
-                </Button>
-                <Button variant="outline" onClick={() => navigate("/storico")}>
-                  Vai allo storico
-                </Button>
+          <section className="max-w-screen-2xl mx-auto px-4 md:px-8">
+            <div className="rounded-3xl border border-muted/30 bg-secondary/30 p-8 md:p-12">
+              <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] items-center">
+                <div className="space-y-4">
+                  <Badge variant="outline" className="w-fit">PERCHÉ REGISTRARSI</Badge>
+                  <h2 className="text-3xl md:text-4xl font-bold">Sblocca la parte più utile di NextTrailer.</h2>
+                  <p className="text-muted-foreground">
+                    La registrazione ti permette di salvare ciò che guardi, sincronizzare lo storico
+                    su tutti i dispositivi e ricevere suggerimenti davvero personalizzati.
+                  </p>
+                  <div className="grid gap-3">
+                    {[
+                      "Sincronizzazione automatica di watchlist e storico",
+                      "Calendario episodi costruito sulle tue serie",
+                      "Suggerimenti basati sui tuoi gusti reali"
+                    ].map((point) => (
+                      <div key={point} className="flex items-start gap-2 text-sm text-muted-foreground">
+                        <CheckCircle2 className="h-4 w-4 text-accent mt-0.5" />
+                        <span>{point}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    <Button className="bg-accent hover:bg-accent/90" onClick={() => navigate("/storico")}>
+                      Registrati gratis
+                    </Button>
+                    <Button variant="outline" onClick={() => navigate("/watchlist")}>
+                      Prova la watchlist
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <Badge variant="outline" className="w-fit">COME FUNZIONA</Badge>
+                  <h3 className="text-2xl font-semibold">Tre passaggi e sei operativo.</h3>
+                  <div className="grid gap-4">
+                    {[
+                      "Crea l’account in pochi secondi.",
+                      "Aggiungi film e serie che stai guardando.",
+                      "Consulta calendario e storico ovunque."
+                    ].map((step, index) => (
+                      <div key={step} className="flex items-start gap-3 rounded-xl border border-muted/30 bg-background/70 p-4">
+                        <div className="h-8 w-8 rounded-full bg-accent/20 text-accent flex items-center justify-center font-semibold">
+                          {index + 1}
+                        </div>
+                        <p className="text-sm text-muted-foreground">{step}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="space-y-4">
-              <Badge variant="outline" className="w-fit">BANALISSIMO</Badge>
-              <h3 className="text-2xl font-semibold">Come funziona il calendario?</h3>
-              <div className="grid gap-4">
-                {[
-                  "Registrati e aggiungi le serie che stai seguendo.",
-                  "Segna gli episodi visti con un click.",
-                  "Consulta il calendario per le prossime uscite."
-                ].map((step, index) => (
-                  <div key={step} className="flex items-start gap-3 rounded-xl border border-muted/30 bg-secondary/20 p-4">
-                    <div className="h-8 w-8 rounded-full bg-accent/20 text-accent flex items-center justify-center font-semibold">
-                      {index + 1}
-                    </div>
-                    <p className="text-sm text-muted-foreground">{step}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          <section className="max-w-screen-2xl mx-auto px-4 md:px-8 grid gap-6 md:grid-cols-2">
-            <Card className="bg-secondary/20 border-muted/40">
-              <CardContent className="p-6 space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-accent/20 flex items-center justify-center">
-                    <ShieldCheck className="h-5 w-5 text-accent" />
-                  </div>
-                  <h3 className="text-lg font-semibold">Privacy al centro</h3>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Usiamo i tuoi dati solo per sincronizzare lo storico e offrirti
-                  un’esperienza personalizzata. Non vendiamo informazioni a terzi.
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="bg-secondary/20 border-muted/40">
-              <CardContent className="p-6 space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-accent/20 flex items-center justify-center">
-                    <Sparkles className="h-5 w-5 text-accent" />
-                  </div>
-                  <h3 className="text-lg font-semibold">Trasparente e sostenibile</h3>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Il progetto vive grazie al supporto della community: niente
-                  pubblicità invasiva, solo utilità reale.
-                </p>
-              </CardContent>
-            </Card>
           </section>
 
           <section className="max-w-screen-2xl mx-auto px-4 md:px-8">
@@ -302,17 +314,17 @@ const Home = () => {
 
           <section className="max-w-screen-2xl mx-auto px-4 md:px-8 pb-16">
             <div className="rounded-3xl border border-muted/30 bg-secondary/30 p-8 md:p-12 text-center space-y-4">
-              <h2 className="text-3xl font-bold">Pronto a organizzare la tua visione?</h2>
+              <h2 className="text-3xl font-bold">Pronto a guardare con metodo?</h2>
               <p className="text-muted-foreground max-w-2xl mx-auto">
-                Inizia a costruire lo storico, segui le uscite e scopri cosa guardare
-                senza perdere tempo tra mille app.
+                Unisciti a NextTrailer e rendi più semplice la tua routine di visione,
+                senza perdere episodi o nuovi titoli importanti.
               </p>
               <div className="flex flex-wrap justify-center gap-3">
-                <Button className="bg-accent hover:bg-accent/90" onClick={() => navigate("/search")}>
-                  Inizia ora
+                <Button className="bg-accent hover:bg-accent/90" onClick={() => navigate("/storico")}>
+                  Registrati gratis
                 </Button>
-                <Button variant="outline" onClick={() => navigate("/movies")}>
-                  Sfoglia i film
+                <Button variant="outline" onClick={() => navigate("/catalogo")}>
+                  Scopri cosa guardare
                 </Button>
               </div>
             </div>
