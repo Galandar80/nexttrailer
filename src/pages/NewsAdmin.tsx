@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { Link } from "react-router-dom";
-import { collection, deleteDoc, doc, getDocs, limit, orderBy, query, setDoc, updateDoc } from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { SEO } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/auth-core";
-import { db, isFirebaseEnabled, storage } from "@/services/firebase";
+import { getDb, getFirestoreModule, getStorage, getStorageModule, isFirebaseEnabled } from "@/services/firebase";
 import { API_URL, fetchWithAccessToken, fetchWithRetry } from "@/services/api/config";
 import { tmdbApi } from "@/services/tmdbApi";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -50,6 +48,18 @@ type TmdbImage = {
 
 const STORAGE_KEY = "news-articles";
 const COMINGSOON_STORAGE_KEY = "comingsoon-articles";
+const loadFirestore = async () => {
+  if (!isFirebaseEnabled) return null;
+  const [db, firestore] = await Promise.all([getDb(), getFirestoreModule()]);
+  if (!db) return null;
+  return { db, ...firestore };
+};
+const loadStorage = async () => {
+  if (!isFirebaseEnabled) return null;
+  const [storage, storageModule] = await Promise.all([getStorage(), getStorageModule()]);
+  if (!storage) return null;
+  return { storage, ...storageModule };
+};
 const toPublicId = (value: string) => {
   let hash1 = 0;
   let hash2 = 0;
@@ -119,11 +129,13 @@ const NewsAdmin = () => {
   const isSuperAdmin = user?.email?.toLowerCase() === "calisma82@gmail.com";
 
   const handleDelete = async (id: string, targetCollection: NewsArticle["collection"]) => {
-    if (!isFirebaseEnabled || !db) {
+    const firestore = await loadFirestore();
+    if (!firestore) {
       toast({ title: "Firebase non configurato", variant: "destructive" });
       return;
     }
     try {
+      const { db, deleteDoc, doc } = firestore;
       await deleteDoc(doc(db, targetCollection, id));
       setArticles((prev) => prev.filter((item) => item.id !== id || item.collection !== targetCollection));
       const storageKey = targetCollection === "news_comingsoon" ? COMINGSOON_STORAGE_KEY : STORAGE_KEY;
@@ -141,13 +153,15 @@ const NewsAdmin = () => {
   };
 
   const loadArticles = useCallback(async () => {
-    if (!isFirebaseEnabled || !db) {
+    const firestore = await loadFirestore();
+    if (!firestore) {
       setError("Firebase non configurato");
       return;
     }
     setIsLoading(true);
     setError(null);
     try {
+      const { db, collection, getDocs, limit, orderBy, query } = firestore;
       const newsQuery = query(collection(db, "news_articles"), orderBy("publishedAtTs", "desc"), limit(200));
       const topQuery = query(collection(db, "news_comingsoon"), orderBy("publishedAtTs", "desc"), limit(200));
       const [newsSnapshot, topSnapshot] = await Promise.all([getDocs(newsQuery), getDocs(topQuery)]);
@@ -175,12 +189,14 @@ const NewsAdmin = () => {
   }, [user, canAccess, isSuperAdmin, loadArticles]);
 
   const handleBackfillPublicIds = async () => {
-    if (!isFirebaseEnabled || !db) {
+    const firestore = await loadFirestore();
+    if (!firestore) {
       toast({ title: "Firebase non configurato", variant: "destructive" });
       return;
     }
     setIsBackfillingIds(true);
     try {
+      const { db, collection, doc, getDocs, limit, orderBy, query, setDoc } = firestore;
       const backfillCollection = async (collectionName: NewsArticle["collection"]) => {
         const snapshot = await getDocs(query(collection(db, collectionName), orderBy("publishedAtTs", "desc"), limit(500)));
         let updated = 0;
@@ -245,11 +261,13 @@ const NewsAdmin = () => {
   );
 
   const moveArticle = async (article: NewsArticle, targetCollection: NewsArticle["collection"]) => {
-    if (!isFirebaseEnabled || !db) {
+    const firestore = await loadFirestore();
+    if (!firestore) {
       toast({ title: "Firebase non configurato", variant: "destructive" });
       return;
     }
     try {
+      const { db, deleteDoc, doc, setDoc } = firestore;
       const sourceCollection = article.collection;
       if (sourceCollection === targetCollection) return;
       const { collection: _collection, ...rest } = article;
@@ -281,7 +299,8 @@ const NewsAdmin = () => {
   };
 
   const handleImageUpload = async (file: File) => {
-    if (!storage || !isFirebaseEnabled) {
+    const storageDeps = await loadStorage();
+    if (!storageDeps) {
       toast({ title: "Firebase Storage non configurato", variant: "destructive" });
       return;
     }
@@ -289,6 +308,7 @@ const NewsAdmin = () => {
     setIsUploadingImage(true);
     try {
       const safeName = `${activeArticle.id}-${Date.now()}-${file.name}`.replace(/\s+/g, "-");
+      const { storage, ref, uploadBytes, getDownloadURL } = storageDeps;
       const imageRef = ref(storage, `news-images/${safeName}`);
       await uploadBytes(imageRef, file);
       const url = await getDownloadURL(imageRef);
@@ -384,11 +404,13 @@ const NewsAdmin = () => {
       toast({ title: "Titolo e testo sono obbligatori", variant: "destructive" });
       return;
     }
-    if (!isFirebaseEnabled || !db) {
+    const firestore = await loadFirestore();
+    if (!firestore) {
       toast({ title: "Firebase non configurato", variant: "destructive" });
       return;
     }
     try {
+      const { db, doc, updateDoc } = firestore;
       const docRef = doc(db, activeArticle.collection, activeArticle.id);
       const trimmedImageUrl = editImageUrl.trim();
       const payload = {

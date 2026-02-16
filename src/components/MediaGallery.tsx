@@ -11,6 +11,7 @@ import { Download, X } from "lucide-react";
 import { tmdbApi } from "@/services/tmdbApi";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { OptimizedImage } from "@/components/OptimizedImage";
 
 interface Image {
   file_path: string;
@@ -184,7 +185,7 @@ const MediaGallery = ({ mediaId, mediaType, onClose }: MediaGalleryProps) => {
                       relative overflow-hidden rounded-lg
                       ${activeTab === "posters" ? "w-[calc(100vh*0.666)] max-w-full mx-auto" : "w-full"}
                     `}>
-                      <img
+                      <OptimizedImage
                         src={tmdbApi.getImageUrl(image.file_path, activeTab === "posters" ? "w780" : "original")}
                         alt={`${mediaType} ${activeTab === "posters" ? "poster" : "backdrop"} ${index + 1}`}
                         className={`
@@ -233,7 +234,7 @@ const MediaGallery = ({ mediaId, mediaType, onClose }: MediaGalleryProps) => {
                       setCurrentImageIndex(index);
                     }}
                   >
-                    <img
+                    <OptimizedImage
                       src={tmdbApi.getImageUrl(image.file_path, "w185")}
                       alt={`Thumbnail ${index + 1}`}
                       className="w-full h-full object-cover"

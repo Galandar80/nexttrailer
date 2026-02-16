@@ -1,5 +1,5 @@
 
-import { Search, User as UserIcon, LogOut } from "lucide-react";
+import { Search, User as UserIcon, LogOut, Menu } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
 const Navbar = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -44,6 +45,7 @@ const Navbar = () => {
   const [registerPassword, setRegisterPassword] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   const [isNewsMenuOpen, setIsNewsMenuOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const watchlistCount = items.length;
   const libraryCount = libraryItems.length;
 
@@ -220,6 +222,10 @@ const Navbar = () => {
     }
   };
 
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [location.pathname]);
+
   return (
     <nav className="py-4 px-4 md:px-8 border-b border-muted/30 z-50 relative bg-background/80 backdrop-blur-md sticky top-0">
       <div className="max-w-screen-2xl mx-auto flex items-center justify-between">
@@ -346,6 +352,91 @@ const Navbar = () => {
           <Button variant="ghost" className="md:hidden" size="icon" onClick={() => navigate('/search')}>
             <Search className="h-4 w-4" />
           </Button>
+          <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" className="md:hidden" size="icon">
+                <Menu className="h-4 w-4" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-72 sm:w-80">
+              <SheetHeader>
+                <SheetTitle>Menu</SheetTitle>
+              </SheetHeader>
+              <div className="mt-6 flex flex-col gap-2">
+                <Button variant="ghost" className="justify-start" asChild>
+                  <Link to="/" onClick={() => setIsMobileMenuOpen(false)}>Home</Link>
+                </Button>
+                <Button variant="ghost" className="justify-start" asChild>
+                  <Link to="/news" onClick={() => setIsMobileMenuOpen(false)}>News</Link>
+                </Button>
+                <Button variant="ghost" className="justify-start" asChild>
+                  <Link to="/news/archivio" onClick={() => setIsMobileMenuOpen(false)}>Archivio news</Link>
+                </Button>
+                <Button variant="ghost" className="justify-start" asChild>
+                  <Link to="/catalogo" onClick={() => setIsMobileMenuOpen(false)}>Catalogo</Link>
+                </Button>
+                <Button variant="ghost" className="justify-start" asChild>
+                  <Link to="/oscar" onClick={() => setIsMobileMenuOpen(false)}>Oscar</Link>
+                </Button>
+                <Button variant="ghost" className="justify-start" asChild>
+                  <Link to="/genres" onClick={() => setIsMobileMenuOpen(false)}>Sfoglia</Link>
+                </Button>
+                <Button variant="ghost" className="justify-start" asChild>
+                  <Link to="/search" onClick={() => setIsMobileMenuOpen(false)}>Cerca</Link>
+                </Button>
+                {canAccess && (
+                  <>
+                    <Button variant="ghost" className="justify-between" asChild>
+                      <Link to="/watchlist" onClick={() => setIsMobileMenuOpen(false)}>
+                        <span>Watchlist</span>
+                        {watchlistCount > 0 && (
+                          <span className="bg-accent text-white text-[10px] rounded-full h-4 min-w-4 px-1 flex items-center justify-center">
+                            {watchlistCount}
+                          </span>
+                        )}
+                      </Link>
+                    </Button>
+                    <Button variant="ghost" className="justify-between" asChild>
+                      <Link to="/storico" onClick={() => setIsMobileMenuOpen(false)}>
+                        <span>Storico</span>
+                        {libraryCount > 0 && (
+                          <span className="bg-accent text-white text-[10px] rounded-full h-4 min-w-4 px-1 flex items-center justify-center">
+                            {libraryCount}
+                          </span>
+                        )}
+                      </Link>
+                    </Button>
+                    <Button variant="ghost" className="justify-start" asChild>
+                      <Link to="/preferenze" onClick={() => setIsMobileMenuOpen(false)}>Preferenze</Link>
+                    </Button>
+                  </>
+                )}
+                {!user && (
+                  <Button
+                    className="justify-start"
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      setAuthOpen(true);
+                    }}
+                  >
+                    Accedi
+                  </Button>
+                )}
+                {user && (
+                  <Button
+                    variant="ghost"
+                    className="justify-start text-red-500"
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      logout();
+                    }}
+                  >
+                    Esci
+                  </Button>
+                )}
+              </div>
+            </SheetContent>
+          </Sheet>
 
           {canAccess && (
             <>

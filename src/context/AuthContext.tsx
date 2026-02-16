@@ -1,21 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import {
-    User,
-    signInWithPopup,
-    GoogleAuthProvider,
-    signOut as firebaseSignOut,
-    onAuthStateChanged,
-    createUserWithEmailAndPassword,
-    signInWithEmailAndPassword,
-    sendEmailVerification,
-    sendPasswordResetEmail,
-    updateProfile,
-    updateEmail,
-    updatePassword,
-    EmailAuthProvider,
-    reauthenticateWithCredential
-} from 'firebase/auth';
-import { auth, isFirebaseEnabled } from '../services/firebase';
+import type { User } from 'firebase/auth';
+import { getAuth, getAuthModule, isFirebaseEnabled } from '../services/firebase';
 import { AuthContext } from './auth-core';
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -24,24 +9,44 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const canAccess = !!user && (!user.providerData.some((provider) => provider.providerId === "password") || user.emailVerified);
 
     useEffect(() => {
-        if (!isFirebaseEnabled || !auth) {
-            setLoading(false);
-            return;
-        }
-        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-            setUser(currentUser);
-            setLoading(false);
-        });
-        return () => unsubscribe();
+        let isMounted = true;
+        let unsubscribe: (() => void) | null = null;
+
+        const initAuth = async () => {
+            if (!isFirebaseEnabled) {
+                if (isMounted) setLoading(false);
+                return;
+            }
+            const [authInstance, authModule] = await Promise.all([getAuth(), getAuthModule()]);
+            if (!isMounted || !authInstance) {
+                if (isMounted) setLoading(false);
+                return;
+            }
+            unsubscribe = authModule.onAuthStateChanged(authInstance, (currentUser) => {
+                setUser(currentUser);
+                setLoading(false);
+            });
+        };
+
+        void initAuth();
+
+        return () => {
+            isMounted = false;
+            if (unsubscribe) unsubscribe();
+        };
     }, []);
 
     const signInWithGoogle = async () => {
-        if (!isFirebaseEnabled || !auth) {
+        if (!isFirebaseEnabled) {
             throw new Error("Firebase non configurato");
         }
-        const provider = new GoogleAuthProvider();
+        const [authInstance, authModule] = await Promise.all([getAuth(), getAuthModule()]);
+        if (!authInstance) {
+            throw new Error("Firebase non configurato");
+        }
+        const provider = new authModule.GoogleAuthProvider();
         try {
-            await signInWithPopup(auth, provider);
+            await authModule.signInWithPopup(authInstance, provider);
         } catch (error) {
             console.error("Error signing in with Google", error);
             throw error;
@@ -49,15 +54,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const signUpWithEmail = async (username: string, email: string, password: string) => {
-        if (!isFirebaseEnabled || !auth) {
+        if (!isFirebaseEnabled) {
+            throw new Error("Firebase non configurato");
+        }
+        const [authInstance, authModule] = await Promise.all([getAuth(), getAuthModule()]);
+        if (!authInstance) {
             throw new Error("Firebase non configurato");
         }
         try {
-            const credential = await createUserWithEmailAndPassword(auth, email, password);
+            const credential = await authModule.createUserWithEmailAndPassword(authInstance, email, password);
             if (credential.user) {
-                await updateProfile(credential.user, { displayName: username });
-                await sendEmailVerification(credential.user);
-                await firebaseSignOut(auth);
+                await authModule.updateProfile(credential.user, { displayName: username });
+                await authModule.sendEmailVerification(credential.user);
+                await authModule.signOut(authInstance);
             }
         } catch (error) {
             console.error("Error signing up with email", error);
@@ -66,14 +75,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const signInWithEmail = async (email: string, password: string) => {
-        if (!isFirebaseEnabled || !auth) {
+        if (!isFirebaseEnabled) {
+            throw new Error("Firebase non configurato");
+        }
+        const [authInstance, authModule] = await Promise.all([getAuth(), getAuthModule()]);
+        if (!authInstance) {
             throw new Error("Firebase non configurato");
         }
         try {
-            const credential = await signInWithEmailAndPassword(auth, email, password);
+            const credential = await authModule.signInWithEmailAndPassword(authInstance, email, password);
             if (credential.user && !credential.user.emailVerified) {
-                await sendEmailVerification(credential.user);
-                await firebaseSignOut(auth);
+                await authModule.sendEmailVerification(credential.user);
+                await authModule.signOut(authInstance);
                 throw new Error("Email non verificata. Ti abbiamo inviato un link di conferma.");
             }
         } catch (error) {
@@ -83,11 +96,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const sendVerificationEmailToUser = async () => {
-        if (!isFirebaseEnabled || !auth || !auth.currentUser) {
+        if (!isFirebaseEnabled) {
+            throw new Error("Firebase non configurato");
+        }
+        const [authInstance, authModule] = await Promise.all([getAuth(), getAuthModule()]);
+        if (!authInstance || !authInstance.currentUser) {
             throw new Error("Firebase non configurato");
         }
         try {
-            await sendEmailVerification(auth.currentUser);
+            await authModule.sendEmailVerification(authInstance.currentUser);
         } catch (error) {
             console.error("Error sending verification email", error);
             throw error;
@@ -95,14 +112,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const resendVerificationWithEmail = async (email: string, password: string) => {
-        if (!isFirebaseEnabled || !auth) {
+        if (!isFirebaseEnabled) {
+            throw new Error("Firebase non configurato");
+        }
+        const [authInstance, authModule] = await Promise.all([getAuth(), getAuthModule()]);
+        if (!authInstance) {
             throw new Error("Firebase non configurato");
         }
         try {
-            const credential = await signInWithEmailAndPassword(auth, email, password);
+            const credential = await authModule.signInWithEmailAndPassword(authInstance, email, password);
             if (credential.user) {
-                await sendEmailVerification(credential.user);
-                await firebaseSignOut(auth);
+                await authModule.sendEmailVerification(credential.user);
+                await authModule.signOut(authInstance);
             }
         } catch (error) {
             console.error("Error resending verification email", error);
@@ -111,11 +132,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const resetPassword = async (email: string) => {
-        if (!isFirebaseEnabled || !auth) {
+        if (!isFirebaseEnabled) {
+            throw new Error("Firebase non configurato");
+        }
+        const [authInstance, authModule] = await Promise.all([getAuth(), getAuthModule()]);
+        if (!authInstance) {
             throw new Error("Firebase non configurato");
         }
         try {
-            await sendPasswordResetEmail(auth, email);
+            await authModule.sendPasswordResetEmail(authInstance, email);
         } catch (error) {
             console.error("Error sending password reset", error);
             throw error;
@@ -123,15 +148,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const updateUserProfile = async (displayName: string) => {
-        if (!isFirebaseEnabled || !auth || !auth.currentUser) {
+        if (!isFirebaseEnabled) {
+            throw new Error("Firebase non configurato");
+        }
+        const [authInstance, authModule] = await Promise.all([getAuth(), getAuthModule()]);
+        if (!authInstance || !authInstance.currentUser) {
             throw new Error("Firebase non configurato");
         }
         if (!displayName.trim()) {
             throw new Error("Nome utente non valido");
         }
         try {
-            await updateProfile(auth.currentUser, { displayName: displayName.trim() });
-            setUser(auth.currentUser);
+            await authModule.updateProfile(authInstance.currentUser, { displayName: displayName.trim() });
+            setUser(authInstance.currentUser);
         } catch (error) {
             console.error("Error updating profile", error);
             throw error;
@@ -139,21 +168,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const updateUserEmail = async (email: string, currentPassword: string) => {
-        if (!isFirebaseEnabled || !auth || !auth.currentUser) {
+        if (!isFirebaseEnabled) {
+            throw new Error("Firebase non configurato");
+        }
+        const [authInstance, authModule] = await Promise.all([getAuth(), getAuthModule()]);
+        if (!authInstance || !authInstance.currentUser) {
             throw new Error("Firebase non configurato");
         }
         if (!email.trim() || !currentPassword) {
             throw new Error("Compila tutti i campi");
         }
-        const hasPasswordProvider = auth.currentUser.providerData.some((provider) => provider.providerId === "password");
+        const hasPasswordProvider = authInstance.currentUser.providerData.some((provider) => provider.providerId === "password");
         if (!hasPasswordProvider) {
             throw new Error("Operazione disponibile solo per account email/password");
         }
         try {
-            const credential = EmailAuthProvider.credential(auth.currentUser.email || "", currentPassword);
-            await reauthenticateWithCredential(auth.currentUser, credential);
-            await updateEmail(auth.currentUser, email.trim());
-            setUser(auth.currentUser);
+            const credential = authModule.EmailAuthProvider.credential(authInstance.currentUser.email || "", currentPassword);
+            await authModule.reauthenticateWithCredential(authInstance.currentUser, credential);
+            await authModule.updateEmail(authInstance.currentUser, email.trim());
+            setUser(authInstance.currentUser);
         } catch (error) {
             console.error("Error updating email", error);
             throw error;
@@ -161,20 +194,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const updateUserPassword = async (currentPassword: string, newPassword: string) => {
-        if (!isFirebaseEnabled || !auth || !auth.currentUser) {
+        if (!isFirebaseEnabled) {
+            throw new Error("Firebase non configurato");
+        }
+        const [authInstance, authModule] = await Promise.all([getAuth(), getAuthModule()]);
+        if (!authInstance || !authInstance.currentUser) {
             throw new Error("Firebase non configurato");
         }
         if (!currentPassword || !newPassword) {
             throw new Error("Compila tutti i campi");
         }
-        const hasPasswordProvider = auth.currentUser.providerData.some((provider) => provider.providerId === "password");
+        const hasPasswordProvider = authInstance.currentUser.providerData.some((provider) => provider.providerId === "password");
         if (!hasPasswordProvider) {
             throw new Error("Operazione disponibile solo per account email/password");
         }
         try {
-            const credential = EmailAuthProvider.credential(auth.currentUser.email || "", currentPassword);
-            await reauthenticateWithCredential(auth.currentUser, credential);
-            await updatePassword(auth.currentUser, newPassword);
+            const credential = authModule.EmailAuthProvider.credential(authInstance.currentUser.email || "", currentPassword);
+            await authModule.reauthenticateWithCredential(authInstance.currentUser, credential);
+            await authModule.updatePassword(authInstance.currentUser, newPassword);
         } catch (error) {
             console.error("Error updating password", error);
             throw error;
@@ -182,11 +219,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const logout = async () => {
-        if (!isFirebaseEnabled || !auth) {
+        if (!isFirebaseEnabled) {
+            throw new Error("Firebase non configurato");
+        }
+        const [authInstance, authModule] = await Promise.all([getAuth(), getAuthModule()]);
+        if (!authInstance) {
             throw new Error("Firebase non configurato");
         }
         try {
-            await firebaseSignOut(auth);
+            await authModule.signOut(authInstance);
         } catch (error) {
             console.error("Error signing out", error);
             throw error;

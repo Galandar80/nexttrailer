@@ -4,6 +4,7 @@ import { Star, User, X } from "lucide-react";
 import { tmdbApi } from "@/services/tmdbApi";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { OptimizedImage } from "@/components/OptimizedImage";
 
 interface Review {
   author: string;
@@ -176,13 +177,11 @@ const MediaReviews = ({ mediaId, mediaType, onClose }: MediaReviewsProps) => {
                 >
                   <div className="flex items-center mb-2">
                     <div className="w-10 h-10 rounded-full overflow-hidden mr-3">
-                      <img 
-                        src={getAvatarUrl(review.author_details?.avatar_path)} 
-                        alt={review.author} 
+                      <OptimizedImage
+                        src={getAvatarUrl(review.author_details?.avatar_path) || "https://www.gravatar.com/avatar?d=mp"}
+                        alt={review.author}
                         className="w-full h-full object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = "https://www.gravatar.com/avatar?d=mp";
-                        }}
+                        loading="lazy"
                       />
                     </div>
                     <div>

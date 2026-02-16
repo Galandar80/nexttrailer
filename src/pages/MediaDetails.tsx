@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Image, Film } from "lucide-react";
 import { tmdbApi, MediaDetails as MediaDetailsType, MediaItem, Trailer } from "@/services/tmdbApi";
@@ -9,9 +9,10 @@ import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import ActorCard from "@/components/ActorCard";
-import MediaReviews from "@/components/MediaReviews";
-import TvSeasons from "@/components/TvSeasons";
-import MediaGallery from "@/components/MediaGallery";
+const MediaReviews = lazy(() => import("@/components/MediaReviews"));
+const TvSeasons = lazy(() => import("@/components/TvSeasons"));
+const MediaGallery = lazy(() => import("@/components/MediaGallery"));
+import { OptimizedImage } from "@/components/OptimizedImage";
 // import ActorDetails from "@/components/ActorDetails"; // No longer needed here
 import { useWatchlistStore } from "@/store/useWatchlistStore";
 import { useLibraryStore, LibraryItem } from "@/store/useLibraryStore";
@@ -21,8 +22,12 @@ import { SEO } from "@/components/SEO";
 import { MediaHero } from "@/components/media/MediaHero";
 import { MediaInfo } from "@/components/media/MediaInfo";
 import { MediaActions } from "@/components/media/MediaActions";
-import { MediaTrivia } from "@/components/media/MediaTrivia";
-import { WatchProvidersDialog } from "@/components/media/WatchProvidersDialog";
+const MediaTrivia = lazy(() =>
+  import("@/components/media/MediaTrivia").then((mod) => ({ default: mod.MediaTrivia }))
+);
+const WatchProvidersDialog = lazy(() =>
+  import("@/components/media/WatchProvidersDialog").then((mod) => ({ default: mod.WatchProvidersDialog }))
+);
 import { useAuth } from "@/context/auth-core";
 
 const MediaDetailsPage = () => {
@@ -85,11 +90,10 @@ const MediaDetailsPage = () => {
         if (!isMounted) return;
 
         if (details) {
-          // Load similar content using centralized API
-          const similar = await tmdbApi.getSimilar(Number(id), mediaType);
-
-          // Load trailers
-          const mediaTrailers = await tmdbApi.getTrailers(Number(id), mediaType);
+          const [similar, mediaTrailers] = await Promise.all([
+            tmdbApi.getSimilar(Number(id), mediaType),
+            tmdbApi.getTrailers(Number(id), mediaType)
+          ]);
 
           if (!isMounted) return;
 
@@ -429,22 +433,30 @@ const MediaDetailsPage = () => {
 
       {/* Modals */}
       {showReviews && id && mediaType && (
-        <MediaReviews mediaId={Number(id)} mediaType={mediaType} onClose={() => setShowReviews(false)} />
+        <Suspense fallback={null}>
+          <MediaReviews mediaId={Number(id)} mediaType={mediaType} onClose={() => setShowReviews(false)} />
+        </Suspense>
       )}
       {showSeasons && id && mediaType === "tv" && (
-        <TvSeasons tvId={Number(id)} onClose={() => setShowSeasons(false)} />
+        <Suspense fallback={null}>
+          <TvSeasons tvId={Number(id)} onClose={() => setShowSeasons(false)} />
+        </Suspense>
       )}
       {showGallery && id && mediaType && (
-        <MediaGallery mediaId={Number(id)} mediaType={mediaType} onClose={() => setShowGallery(false)} />
+        <Suspense fallback={null}>
+          <MediaGallery mediaId={Number(id)} mediaType={mediaType} onClose={() => setShowGallery(false)} />
+        </Suspense>
       )}
       {/* Actor Modal Removed in favor of dedicated page */}
 
-      <WatchProvidersDialog
-        open={showWatchProviders}
-        onOpenChange={setShowWatchProviders}
-        title={title || ""}
-        media={media}
-      />
+      <Suspense fallback={null}>
+        <WatchProvidersDialog
+          open={showWatchProviders}
+          onOpenChange={setShowWatchProviders}
+          title={title || ""}
+          media={media}
+        />
+      </Suspense>
 
       {/* Main Content */}
       <main className="max-w-screen-xl mx-auto px-4 md:px-8 -mt-32 lg:-mt-64 relative z-10">
@@ -452,7 +464,7 @@ const MediaDetailsPage = () => {
           {/* Poster */}
           <div className="w-full lg:w-1/4 flex-shrink-0">
             <div className="rounded-lg overflow-hidden border-2 border-muted/20 shadow-xl">
-              <img src={posterUrl} alt={title} className="w-full aspect-[2/3] object-cover" />
+              <OptimizedImage src={posterUrl} alt={title || ""} className="w-full aspect-[2/3] object-cover" loading="lazy" />
             </div>
           </div>
 
@@ -495,7 +507,9 @@ const MediaDetailsPage = () => {
                     ))}
                   </div>
                 </div>
-                <TvSeasons tvId={Number(id)} variant="inline" />
+                <Suspense fallback={null}>
+                  <TvSeasons tvId={Number(id)} variant="inline" />
+                </Suspense>
               </div>
             )}
 
@@ -506,11 +520,13 @@ const MediaDetailsPage = () => {
             </div>
 
             {/* AI Trivia */}
-            <MediaTrivia
-              trivia={trivia}
-              showTrivia={showTrivia}
-              onToggleTrivia={handleShowTrivia}
-            />
+            <Suspense fallback={null}>
+              <MediaTrivia
+                trivia={trivia}
+                showTrivia={showTrivia}
+                onToggleTrivia={handleShowTrivia}
+              />
+            </Suspense>
 
             {/* Credits */}
             <div className="mb-8 mt-8">

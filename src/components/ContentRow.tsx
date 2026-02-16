@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from "react";
+import React, { useMemo, useState, useRef } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { MediaItem } from "@/services/tmdbApi";
 import MovieCard from "./MovieCard";
@@ -33,13 +33,14 @@ const ContentRow = ({ title, items, icon, showBadges = false }: ContentRowProps)
     }
   };
   
-  // Function to get a random similar title from the collection
-  const getRandomSimilarTitle = (currentIndex: number): string => {
-    if (items.length <= 1) return "";
-    const availableItems = items.filter((_, i) => i !== currentIndex);
-    const randomItem = availableItems[Math.floor(Math.random() * availableItems.length)];
-    return "title" in randomItem ? randomItem.title : randomItem.name;
-  };
+  const similarTitles = useMemo(() => {
+    if (items.length <= 1) return items.map(() => "");
+    return items.map((_, currentIndex) => {
+      const availableItems = items.filter((_, i) => i !== currentIndex);
+      const randomItem = availableItems[Math.floor(Math.random() * availableItems.length)];
+      return "title" in randomItem ? randomItem.title : randomItem.name;
+    });
+  }, [items]);
 
   return (
     <div className="content-section">
@@ -76,7 +77,7 @@ const ContentRow = ({ title, items, icon, showBadges = false }: ContentRowProps)
             <MovieCard 
               media={item} 
               showBadge={showBadges} 
-              similarTitle={getRandomSimilarTitle(idx)}
+              similarTitle={similarTitles[idx]}
             />
           </div>
         ))}

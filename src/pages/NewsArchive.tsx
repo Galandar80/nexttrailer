@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { SEO } from "@/components/SEO";
@@ -8,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { db, isFirebaseEnabled } from "@/services/firebase";
+import { getDb, getFirestoreModule, isFirebaseEnabled } from "@/services/firebase";
+import { OptimizedImage } from "@/components/OptimizedImage";
 
 type NewsArticle = {
   id: string;
@@ -28,6 +28,12 @@ const STORAGE_KEY = "news-articles";
 const COMINGSOON_STORAGE_KEY = "comingsoon-articles";
 const PAGE_SIZE = 18;
 const MAX_ARCHIVE = 200;
+const loadFirestore = async () => {
+  if (!isFirebaseEnabled) return null;
+  const [db, firestore] = await Promise.all([getDb(), getFirestoreModule()]);
+  if (!db) return null;
+  return { db, ...firestore };
+};
 const toDocId = (value: string) => encodeURIComponent(value);
 const toPublicId = (value: string) => {
   let hash1 = 0;
@@ -91,7 +97,8 @@ const NewsArchive = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(storedNews));
     localStorage.setItem(COMINGSOON_STORAGE_KEY, JSON.stringify(storedComing));
     setIsLoading(true);
-    if (!isFirebaseEnabled || !db) {
+    const firestore = await loadFirestore();
+    if (!firestore) {
       const sorted = [...stored].sort((a, b) => b.publishedAtTs - a.publishedAtTs);
       setLocalAllArticles(sorted);
       setArticles(sorted.slice(0, PAGE_SIZE));
@@ -100,6 +107,7 @@ const NewsArchive = () => {
       return;
     }
     try {
+      const { db, collection, getDocs, limit, orderBy, query } = firestore;
       const [newsSnapshot, comingSnapshot] = await Promise.all([
         getDocs(query(collection(db, "news_articles"), orderBy("publishedAtTs", "desc"), limit(MAX_ARCHIVE))),
         getDocs(query(collection(db, "news_comingsoon"), orderBy("publishedAtTs", "desc"), limit(MAX_ARCHIVE)))
@@ -219,10 +227,11 @@ const NewsArchive = () => {
                 <Card key={article.id} className="overflow-hidden hover:shadow-lg transition-shadow">
                   <div className="h-48 overflow-hidden">
                     {article.imageUrl ? (
-                      <img
+                      <OptimizedImage
                         src={article.imageUrl}
                         alt={article.title}
                         className="w-full h-full object-cover transition-transform hover:scale-105"
+                        loading="lazy"
                       />
                     ) : (
                       <div className="w-full h-full bg-secondary/40" />

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Info, ChevronLeft, ChevronRight, Volume2, VolumeX, TrendingUp } from "lucide-react";
 import { MediaItem, Trailer, tmdbApi } from "@/services/tmdbApi";
@@ -10,9 +10,16 @@ interface TrailerCarouselProps {
   featuredContent: MediaItem[];
 }
 
+const getMediaType = (item: MediaItem) => {
+  if (item.media_type === "person") return "movie";
+  return item.media_type || ("title" in item ? "movie" : "tv");
+};
+
+const getTrailerKey = (item: MediaItem) => `${getMediaType(item)}-${item.id}`;
+
 const TrailerCarousel = ({ featuredContent }: TrailerCarouselProps) => {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [trailers, setTrailers] = useState<(Trailer | null)[]>([]);
+  const [trailers, setTrailers] = useState<Record<string, Trailer | null>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isMuted, setIsMuted] = useState(true);
   const [showTrailer, setShowTrailer] = useState(false);
@@ -27,28 +34,47 @@ const TrailerCarousel = ({ featuredContent }: TrailerCarouselProps) => {
   const title = currentItem ? (isMovie ? currentItem.title : currentItem.name) : "";
   
   useEffect(() => {
-    const loadTrailers = async () => {
-      if (!featuredContent || featuredContent.length === 0) return;
-      
-      setIsLoading(true);
-      
+    if (!featuredContent || featuredContent.length === 0 || !currentItem) return;
+
+    let isActive = true;
+    const currentKey = getTrailerKey(currentItem);
+
+    const loadTrailer = async (item: MediaItem, setLoading: boolean) => {
+      const key = getTrailerKey(item);
+      if (trailers[key] !== undefined) {
+        if (setLoading && isActive) setIsLoading(false);
+        return;
+      }
+      if (setLoading) setIsLoading(true);
       try {
-        const trailerPromises = featuredContent.map(item => 
-          tmdbApi.getTrailers(item.id, item.media_type === "person" ? "movie" : item.media_type)
-            .then(videos => videos.length > 0 ? videos[0] : null)
-        );
-        
-        const loadedTrailers = await Promise.all(trailerPromises);
-        setTrailers(loadedTrailers);
+        const videos = await tmdbApi.getTrailers(item.id, getMediaType(item));
+        if (!isActive) return;
+        setTrailers((prev) => ({
+          ...prev,
+          [key]: videos.length > 0 ? videos[0] : null
+        }));
       } catch (error) {
+        if (!isActive) return;
         console.error("Errore nel caricamento dei trailer:", error);
+        setTrailers((prev) => ({ ...prev, [key]: null }));
       } finally {
-        setIsLoading(false);
+        if (setLoading && isActive) setIsLoading(false);
       }
     };
-    
-    loadTrailers();
-  }, [featuredContent]);
+
+    void loadTrailer(currentItem, true);
+
+    if (featuredContent.length > 1) {
+      const nextItem = featuredContent[(currentIndex + 1) % featuredContent.length];
+      if (nextItem) {
+        void loadTrailer(nextItem, false);
+      }
+    }
+
+    return () => {
+      isActive = false;
+    };
+  }, [currentIndex, currentItem, featuredContent, trailers]);
 
   // Effetto per mostrare il trailer dopo 5 secondi
   useEffect(() => {
@@ -91,12 +117,6 @@ const TrailerCarousel = ({ featuredContent }: TrailerCarouselProps) => {
       return () => clearTimeout(autoAdvanceTimer);
     }
   }, [showTrailer, isLoading, currentIndex, handleNext]);
-  
-  // Check if featuredContent array is empty or current index is invalid
-  if (!featuredContent || featuredContent.length === 0 || currentIndex >= featuredContent.length) {
-    return <div className="h-[60vh] bg-secondary/20 animate-pulse flex items-center justify-center">Caricamento contenuti in evidenza...</div>;
-  }
-
   
   const handleViewDetails = () => {
     if (!currentItem) return;
@@ -201,15 +221,22 @@ const TrailerCarousel = ({ featuredContent }: TrailerCarouselProps) => {
     });
   };
 
-  if (featuredContent.length === 0 || !currentItem) {
+  const trailerKey = currentItem ? getTrailerKey(currentItem) : "";
+  const trailer = trailerKey ? trailers[trailerKey] : null;
+  const backdropUrl = tmdbApi.getImageUrl(currentItem.backdrop_path, "original");
+
+  const { popularityTrend, trendPercentage } = useMemo(() => {
+    const seed = currentItem?.id ?? 0;
+    void seed;
+    return {
+      popularityTrend: Math.random() > 0.5 ? "+" : "-",
+      trendPercentage: Math.floor(Math.random() * 80) + 20
+    };
+  }, [currentItem?.id]);
+
+  if (!featuredContent || featuredContent.length === 0 || currentIndex >= featuredContent.length || !currentItem) {
     return <div className="h-[60vh] bg-secondary/20 animate-pulse flex items-center justify-center">Caricamento contenuti in evidenza...</div>;
   }
-
-  const trailer = trailers[currentIndex];
-  const backdropUrl = tmdbApi.getImageUrl(currentItem.backdrop_path, "original");
-  
-  const popularityTrend = Math.random() > 0.5 ? "+" : "-";
-  const trendPercentage = Math.floor(Math.random() * 80) + 20; // Random between 20% and 100%
   
   return (
     <section className="relative h-[70vh] overflow-hidden">

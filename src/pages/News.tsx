@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Newspaper } from "lucide-react";
-import { QueryDocumentSnapshot, collection, doc, getDoc, getDocs, limit, orderBy, query, setDoc, startAfter } from "firebase/firestore";
+import type { QueryDocumentSnapshot } from "firebase/firestore";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { SEO } from "@/components/SEO";
-import { db, isFirebaseEnabled } from "@/services/firebase";
+import { getDb, getFirestoreModule, isFirebaseEnabled } from "@/services/firebase";
 import { useAuth } from "@/context/auth-core";
 import { Card, CardContent } from "@/components/ui/card";
+import { OptimizedImage } from "@/components/OptimizedImage";
 
 type RawRssItem = {
   title: string;
@@ -43,6 +44,13 @@ const MAX_ARTICLES = 3;
 const MAX_COMINGSOON = 6;
 const PAGE_SIZE = 12;
 const AUTO_REFRESH_MS = 1000 * 60 * 60 * 6;
+
+const loadFirestore = async () => {
+  if (!isFirebaseEnabled) return null;
+  const [db, firestore] = await Promise.all([getDb(), getFirestoreModule()]);
+  if (!db) return null;
+  return { db, ...firestore };
+};
 
 const normalizeText = (value: unknown) => {
   if (typeof value !== "string") {
@@ -338,7 +346,8 @@ const News = () => {
       setIsLoading(true);
     }
     setLastError(null);
-    if (!isFirebaseEnabled || !db) {
+    const firestore = await loadFirestore();
+    if (!firestore) {
       setLocalAllArticles(stored);
       setArticles(stored.slice(0, PAGE_SIZE));
       setHasMore(stored.length > PAGE_SIZE);
@@ -348,6 +357,7 @@ const News = () => {
       return;
     }
     try {
+      const { db, collection, doc, getDocs, limit, orderBy, query, setDoc } = firestore;
       const newsQuery = query(collection(db, "news_articles"), orderBy("publishedAtTs", "desc"), limit(PAGE_SIZE));
       const snapshot = await getDocs(newsQuery);
       const fetched = stripWikipediaImages(snapshot.docs.map((entry) => {
@@ -386,13 +396,15 @@ const News = () => {
         normalizeComingsoonArticles(parseStoredArticles(localStorage.getItem(COMINGSOON_STORAGE_KEY)))
       );
       localStorage.setItem(COMINGSOON_STORAGE_KEY, JSON.stringify(stored));
-      if (!isFirebaseEnabled || !db) {
+      const firestore = await loadFirestore();
+      if (!firestore) {
         if (stored.length > 0) {
           setTopArticles(stored);
         }
         return;
       }
       try {
+        const { db, collection, doc, getDocs, limit, orderBy, query, setDoc } = firestore;
         const newsQuery = query(collection(db, "news_comingsoon"), orderBy("publishedAtTs", "desc"), limit(MAX_COMINGSOON));
         const snapshot = await getDocs(newsQuery);
         const fetched = stripWikipediaImages(snapshot.docs.map((entry) => {
@@ -426,6 +438,7 @@ const News = () => {
       const cachedMap = new Map(cached.map((item) => [item.id, item]));
       const xmlText = await fetchFeedXml(COMINGSOON_FEED_URL);
       const items = parseRss(xmlText).slice(0, MAX_COMINGSOON);
+      const firestore = await loadFirestore();
       const refreshed: NewsArticle[] = [];
       const refreshedIds = new Set<string>();
       for (const item of items) {
@@ -437,7 +450,8 @@ const News = () => {
           refreshedIds.add(docId);
           resolved = true;
         }
-        if (!resolved && isFirebaseEnabled && db) {
+        if (!resolved && firestore) {
+          const { db, doc, getDoc, setDoc } = firestore;
           const docRef = doc(db, "news_comingsoon", docId);
           const existing = await getDoc(docRef);
           if (existing.exists()) {
@@ -469,7 +483,8 @@ const News = () => {
           };
           refreshed.push(created);
           refreshedIds.add(docId);
-          if (isFirebaseEnabled && db) {
+          if (firestore) {
+            const { db, doc, setDoc } = firestore;
             const docRef = doc(db, "news_comingsoon", docId);
             await setDoc(docRef, created, { merge: true });
           }
@@ -498,6 +513,7 @@ const News = () => {
       const cachedMap = new Map(cachedArticles.map((item) => [item.id, item]));
       const xmlText = await fetchFeedXml(feedUrl);
       const items = parseRss(xmlText).slice(0, MAX_ARTICLES);
+      const firestore = await loadFirestore();
       const refreshed: NewsArticle[] = [];
       const refreshedIds = new Set<string>();
       for (const item of items) {
@@ -508,7 +524,8 @@ const News = () => {
           refreshedIds.add(docId);
           continue;
         }
-        if (isFirebaseEnabled && db) {
+        if (firestore) {
+          const { db, doc, getDoc, setDoc } = firestore;
           const docRef = doc(db, "news_articles", docId);
           const existing = await getDoc(docRef);
           if (existing.exists()) {
@@ -540,7 +557,8 @@ const News = () => {
         };
         refreshed.push(created);
         refreshedIds.add(docId);
-        if (isFirebaseEnabled && db) {
+        if (firestore) {
+          const { db, doc, setDoc } = firestore;
           const docRef = doc(db, "news_articles", docId);
           await setDoc(docRef, created, { merge: true });
         }
@@ -554,7 +572,8 @@ const News = () => {
       setHasMore(merged.length > PAGE_SIZE);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
       localStorage.setItem(LOCAL_REFRESH_KEY, String(Date.now()));
-      if (isFirebaseEnabled && db) {
+      if (firestore) {
+        const { db, doc, setDoc } = firestore;
         const metaRef = doc(db, "news_meta", "global");
         await setDoc(metaRef, { lastRefreshAt: Date.now() }, { merge: true });
         await loadInitialArticles(true);
@@ -572,7 +591,8 @@ const News = () => {
 
   const handleLoadMore = useCallback(async () => {
     if (isLoadingMore) return;
-    if (!isFirebaseEnabled || !db) {
+    const firestore = await loadFirestore();
+    if (!firestore) {
       const next = localAllArticles.slice(0, articles.length + PAGE_SIZE);
       setArticles(next);
       setHasMore(localAllArticles.length > next.length);
@@ -584,6 +604,7 @@ const News = () => {
     }
     setIsLoadingMore(true);
     try {
+      const { db, collection, doc, getDocs, limit, orderBy, query, setDoc, startAfter } = firestore;
       const newsQuery = query(
         collection(db, "news_articles"),
         orderBy("publishedAtTs", "desc"),
@@ -635,7 +656,9 @@ const News = () => {
       try {
         const now = Date.now();
         let lastRefreshAt: number | undefined;
-        if (isFirebaseEnabled && db) {
+        const firestore = await loadFirestore();
+        if (firestore) {
+          const { db, doc, getDoc } = firestore;
           const metaRef = doc(db, "news_meta", "global");
           const snapshot = await getDoc(metaRef);
           lastRefreshAt = snapshot.exists() ? (snapshot.data().lastRefreshAt as number | undefined) : undefined;
@@ -686,10 +709,11 @@ const News = () => {
               className="relative overflow-hidden rounded-2xl bg-secondary/30 min-h-[320px] flex items-end"
             >
               {topArticles[0].imageUrl ? (
-                <img
+                <OptimizedImage
                   src={topArticles[0].imageUrl}
                   alt={topArticles[0].title}
                   className="absolute inset-0 w-full h-full object-cover"
+                  loading="lazy"
                 />
               ) : (
                 <div className="absolute inset-0 bg-secondary/40" />
@@ -714,10 +738,11 @@ const News = () => {
                   className="flex gap-3 rounded-2xl bg-secondary/20 p-3 hover:bg-secondary/30 transition-colors"
                 >
                   {item.imageUrl ? (
-                    <img
+                    <OptimizedImage
                       src={item.imageUrl}
                       alt={item.title}
                       className="h-20 w-28 object-cover rounded-xl"
+                      loading="lazy"
                     />
                   ) : (
                     <div className="h-20 w-28 rounded-xl bg-secondary/40" />
@@ -751,10 +776,11 @@ const News = () => {
                   <Card key={article.id} className="overflow-hidden hover:shadow-lg transition-shadow">
                     <div className="h-48 overflow-hidden">
                       {article.imageUrl ? (
-                        <img
+                        <OptimizedImage
                           src={article.imageUrl}
                           alt={article.title}
                           className="w-full h-full object-cover transition-transform hover:scale-105"
+                          loading="lazy"
                         />
                       ) : (
                         <div className="w-full h-full bg-secondary/40" />

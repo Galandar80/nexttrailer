@@ -1,8 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
-import { onAuthStateChanged } from "firebase/auth";
-import { db, auth } from "@/services/firebase";
+import { getAuth, getAuthModule, getDb, getFirestoreModule, isFirebaseEnabled } from "@/services/firebase";
 
 export type LibraryStatus = "planned" | "watching" | "completed" | "dropped";
 
@@ -36,6 +34,20 @@ interface LibraryState {
   syncWithCloud: () => Promise<void>;
 }
 
+let currentUserId: string | null = null;
+
+const loadFirebaseDeps = async () => {
+  if (!isFirebaseEnabled) return null;
+  const [authInstance, dbInstance, authModule, firestoreModule] = await Promise.all([
+    getAuth(),
+    getDb(),
+    getAuthModule(),
+    getFirestoreModule()
+  ]);
+  if (!authInstance || !dbInstance) return null;
+  return { auth: authInstance, db: dbInstance, authModule, firestoreModule };
+};
+
 const sanitizeValue = (value: unknown): unknown => {
   if (value === undefined) return undefined;
   if (Array.isArray(value)) {
@@ -58,7 +70,7 @@ const sanitizeItem = <T extends Record<string, unknown>>(item: T): T => {
 const nowIso = () => new Date().toISOString();
 
 const getUserStorageKey = () => {
-  const uid = auth?.currentUser?.uid || localStorage.getItem("library-user-id");
+  const uid = currentUserId || localStorage.getItem("library-user-id");
   return uid ? `library-storage-${uid}` : "library-storage-guest";
 };
 
@@ -80,8 +92,10 @@ const userStorage = createJSONStorage(() => ({
 }));
 
 const updateCloud = async (items: LibraryItem[]) => {
-  if (!auth || !db || !auth.currentUser) return;
-  const userRef = doc(db, "users", auth.currentUser.uid);
+  const deps = await loadFirebaseDeps();
+  if (!deps || !deps.auth.currentUser) return;
+  const { doc, setDoc } = deps.firestoreModule;
+  const userRef = doc(deps.db, "users", deps.auth.currentUser.uid);
   const sanitizedItems = items.map((entry) => sanitizeItem(entry));
   await setDoc(userRef, { library: sanitizedItems }, { merge: true });
 };
@@ -90,9 +104,12 @@ export const useLibraryStore = create<LibraryState>()(
   persist(
     (set, get) => {
       let activeUserId: string | null = null;
-      if (auth) {
-        onAuthStateChanged(auth, async (user) => {
+      const setupAuthListener = async () => {
+        const deps = await loadFirebaseDeps();
+        if (!deps) return;
+        deps.authModule.onAuthStateChanged(deps.auth, async (user) => {
           if (user) {
+            currentUserId = user.uid;
             if (activeUserId !== user.uid) {
               activeUserId = user.uid;
               localStorage.setItem("library-user-id", user.uid);
@@ -100,20 +117,24 @@ export const useLibraryStore = create<LibraryState>()(
             }
             await get().syncWithCloud();
           } else {
+            currentUserId = null;
             activeUserId = null;
             localStorage.removeItem("library-user-id");
             localStorage.removeItem("library-storage-guest");
             set({ items: [] });
           }
         });
-      }
+      };
+
+      void setupAuthListener();
 
       return {
         items: [],
         isLoading: false,
 
         addItem: async (item: LibraryItem) => {
-          if (!auth?.currentUser) return;
+          const deps = await loadFirebaseDeps();
+          if (!deps || !deps.auth.currentUser) return;
           const { items } = get();
           const existsIndex = items.findIndex(
             (i) => i.id === item.id && i.media_type === item.media_type
@@ -132,21 +153,22 @@ export const useLibraryStore = create<LibraryState>()(
         },
 
         removeItem: async (id: number, mediaType: "movie" | "tv") => {
-          if (!auth?.currentUser) return;
+          const deps = await loadFirebaseDeps();
+          if (!deps || !deps.auth.currentUser) return;
           const { items } = get();
           const newItems = items.filter(
             (item) => !(item.id === id && item.media_type === mediaType)
           );
           set({ items: newItems });
-          if (auth && db && auth.currentUser) {
-            const userRef = doc(db, "users", auth.currentUser.uid);
-            const sanitizedItems = newItems.map((entry) => sanitizeItem(entry));
-            await updateDoc(userRef, { library: sanitizedItems });
-          }
+          const { doc, updateDoc } = deps.firestoreModule;
+          const userRef = doc(deps.db, "users", deps.auth.currentUser.uid);
+          const sanitizedItems = newItems.map((entry) => sanitizeItem(entry));
+          await updateDoc(userRef, { library: sanitizedItems });
         },
 
         updateStatus: async (id: number, mediaType: "movie" | "tv", status: LibraryStatus) => {
-          if (!auth?.currentUser) return;
+          const deps = await loadFirebaseDeps();
+          if (!deps || !deps.auth.currentUser) return;
           const updatedAt = nowIso();
           const newItems = get().items.map<LibraryItem>((item) => {
             if (item.id === id && item.media_type === mediaType) {
@@ -164,7 +186,8 @@ export const useLibraryStore = create<LibraryState>()(
         },
 
         markMovieWatched: async (id: number) => {
-          if (!auth?.currentUser) return;
+          const deps = await loadFirebaseDeps();
+          if (!deps || !deps.auth.currentUser) return;
           const updatedAt = nowIso();
           const newItems = get().items.map<LibraryItem>((item) => {
             if (item.id === id && item.media_type === "movie") {
@@ -177,7 +200,8 @@ export const useLibraryStore = create<LibraryState>()(
         },
 
         toggleEpisodeWatched: async (tvId: number, seasonNumber: number, episodeNumber: number) => {
-          if (!auth?.currentUser) return;
+          const deps = await loadFirebaseDeps();
+          if (!deps || !deps.auth.currentUser) return;
           const updatedAt = nowIso();
           const items = get().items;
           const existing = items.find((i) => i.id === tvId && i.media_type === "tv");
@@ -206,7 +230,8 @@ export const useLibraryStore = create<LibraryState>()(
         },
 
         setSeasonWatched: async (tvId: number, seasonNumber: number, episodeNumbers: number[]) => {
-          if (!auth?.currentUser) return;
+          const deps = await loadFirebaseDeps();
+          if (!deps || !deps.auth.currentUser) return;
           const updatedAt = nowIso();
           const items = get().items;
           const existing = items.find((i) => i.id === tvId && i.media_type === "tv");
@@ -241,10 +266,12 @@ export const useLibraryStore = create<LibraryState>()(
         },
 
         syncWithCloud: async () => {
-          if (!auth || !db || !auth.currentUser) return;
+          const deps = await loadFirebaseDeps();
+          if (!deps || !deps.auth.currentUser) return;
           set({ isLoading: true });
           try {
-            const userRef = doc(db, "users", auth.currentUser.uid);
+            const { doc, getDoc, setDoc } = deps.firestoreModule;
+            const userRef = doc(deps.db, "users", deps.auth.currentUser.uid);
             const docSnap = await getDoc(userRef);
             if (docSnap.exists()) {
               const cloudItems = (docSnap.data().library as LibraryItem[]) || [];

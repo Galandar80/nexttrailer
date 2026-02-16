@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { collection, doc, getDoc, getDocs, limit, query, where } from "firebase/firestore";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { SEO } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
-import { db, isFirebaseEnabled } from "@/services/firebase";
+import { getDb, getFirestoreModule, isFirebaseEnabled } from "@/services/firebase";
 
 type NewsArticle = {
   id: string;
@@ -23,6 +22,12 @@ type NewsArticle = {
 
 const STORAGE_KEY = "news-articles";
 const COMINGSOON_STORAGE_KEY = "comingsoon-articles";
+const loadFirestore = async () => {
+  if (!isFirebaseEnabled) return null;
+  const [db, firestore] = await Promise.all([getDb(), getFirestoreModule()]);
+  if (!db) return null;
+  return { db, ...firestore };
+};
 const toDocId = (value: string) => encodeURIComponent(value);
 const toPublicId = (value: string) => {
   let hash1 = 0;
@@ -170,7 +175,8 @@ const NewsArticlePage = () => {
         return { ...item, id: item.id || derivedId, publicId };
       }).filter((item) => item.id);
       const localMatch = normalizedLocal.find((item) => candidateDocIds.includes(item.id) || (!!item.publicId && candidatePublicIds.includes(item.publicId)));
-      if (!isFirebaseEnabled || !db) {
+      const firestore = await loadFirestore();
+      if (!firestore) {
         if (localMatch) {
           setArticle(localMatch);
           setIsMissing(false);
@@ -180,6 +186,7 @@ const NewsArticlePage = () => {
         return;
       }
       try {
+        const { db, collection, doc, getDoc, getDocs, limit, query, where } = firestore;
         for (const candidateId of candidateDocIds) {
           const docRef = doc(db, "news_articles", candidateId);
           const snapshot = await getDoc(docRef);

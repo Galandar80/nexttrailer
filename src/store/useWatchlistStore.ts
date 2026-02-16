@@ -2,9 +2,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { MediaItem } from '@/services/tmdbApi';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
-import { db, auth } from '@/services/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { getAuth, getAuthModule, getDb, getFirestoreModule, isFirebaseEnabled } from '@/services/firebase';
 
 interface WatchlistState {
     items: MediaItem[];
@@ -15,6 +13,20 @@ interface WatchlistState {
     clearWatchlist: () => void;
     syncWithCloud: () => Promise<void>;
 }
+
+let currentUserId: string | null = null;
+
+const loadFirebaseDeps = async () => {
+    if (!isFirebaseEnabled) return null;
+    const [authInstance, dbInstance, authModule, firestoreModule] = await Promise.all([
+        getAuth(),
+        getDb(),
+        getAuthModule(),
+        getFirestoreModule()
+    ]);
+    if (!authInstance || !dbInstance) return null;
+    return { auth: authInstance, db: dbInstance, authModule, firestoreModule };
+};
 
 const sanitizeValue = (value: unknown): unknown => {
     if (value === undefined) return undefined;
@@ -46,14 +58,22 @@ const getStoredItemsForUser = (uid: string) => {
     }
 };
 
+const getUserStorageKey = () => {
+    const uid = currentUserId || localStorage.getItem("watchlist-user-id");
+    return uid ? `watchlist-storage-${uid}` : "watchlist-storage-guest";
+};
+
 export const useWatchlistStore = create<WatchlistState>()(
     persist(
         (set, get) => {
             let activeUserId: string | null = null;
-            // Setup listener for auth changes to sync
-            if (auth) {
-                onAuthStateChanged(auth, async (user) => {
+
+            const setupAuthListener = async () => {
+                const deps = await loadFirebaseDeps();
+                if (!deps) return;
+                deps.authModule.onAuthStateChanged(deps.auth, async (user) => {
                     if (user) {
+                        currentUserId = user.uid;
                         if (activeUserId !== user.uid) {
                             activeUserId = user.uid;
                             localStorage.setItem("watchlist-user-id", user.uid);
@@ -61,20 +81,24 @@ export const useWatchlistStore = create<WatchlistState>()(
                         }
                         await get().syncWithCloud();
                     } else {
+                        currentUserId = null;
                         activeUserId = null;
                         localStorage.removeItem("watchlist-user-id");
                         localStorage.removeItem("watchlist-storage-guest");
                         set({ items: [] });
                     }
                 });
-            }
+            };
+
+            void setupAuthListener();
 
             return {
                 items: [],
                 isLoading: false,
 
                 addItem: async (item: MediaItem) => {
-                    if (!auth?.currentUser) return;
+                    const deps = await loadFirebaseDeps();
+                    if (!deps || !deps.auth.currentUser) return;
                     const { items } = get();
                     const exists = items.some(
                         (i) => i.id === item.id && i.media_type === item.media_type
@@ -85,21 +109,20 @@ export const useWatchlistStore = create<WatchlistState>()(
                         set({ items: newItems });
 
                         // Sync to Firestore if logged in
-                        if (auth && db && auth.currentUser) {
-                            try {
-                                const userRef = doc(db, 'users', auth.currentUser.uid);
-                                const sanitizedItems = newItems.map((entry) => sanitizeItem(entry));
-                                // Using arrayUnion to avoid duplicates in DB
-                                await setDoc(userRef, { watchlist: sanitizedItems }, { merge: true });
-                            } catch (e) {
-                                console.error("Error adding to Firestore", e);
-                            }
+                        try {
+                            const { doc, setDoc } = deps.firestoreModule;
+                            const userRef = doc(deps.db, 'users', deps.auth.currentUser.uid);
+                            const sanitizedItems = newItems.map((entry) => sanitizeItem(entry));
+                            await setDoc(userRef, { watchlist: sanitizedItems }, { merge: true });
+                        } catch (e) {
+                            console.error("Error adding to Firestore", e);
                         }
                     }
                 },
 
                 removeItem: async (id: number, mediaType: 'movie' | 'tv') => {
-                    if (!auth?.currentUser) return;
+                    const deps = await loadFirebaseDeps();
+                    if (!deps || !deps.auth.currentUser) return;
                     const { items } = get();
                     const newItems = items.filter(
                         (item) => !(item.id === id && item.media_type === mediaType)
@@ -107,14 +130,13 @@ export const useWatchlistStore = create<WatchlistState>()(
                     set({ items: newItems });
 
                     // Sync to Firestore if logged in
-                    if (auth && db && auth.currentUser) {
-                        try {
-                            const userRef = doc(db, 'users', auth.currentUser.uid);
-                            const sanitizedItems = newItems.map((entry) => sanitizeItem(entry));
-                            await updateDoc(userRef, { watchlist: sanitizedItems });
-                        } catch (e) {
-                            console.error("Error removing from Firestore", e);
-                        }
+                    try {
+                        const { doc, updateDoc } = deps.firestoreModule;
+                        const userRef = doc(deps.db, 'users', deps.auth.currentUser.uid);
+                        const sanitizedItems = newItems.map((entry) => sanitizeItem(entry));
+                        await updateDoc(userRef, { watchlist: sanitizedItems });
+                    } catch (e) {
+                        console.error("Error removing from Firestore", e);
                     }
                 },
 
@@ -130,10 +152,12 @@ export const useWatchlistStore = create<WatchlistState>()(
                 },
 
                 syncWithCloud: async () => {
-                    if (!auth || !db || !auth.currentUser) return;
+                    const deps = await loadFirebaseDeps();
+                    if (!deps || !deps.auth.currentUser) return;
                     set({ isLoading: true });
                     try {
-                        const userRef = doc(db, 'users', auth.currentUser.uid);
+                        const { doc, getDoc, setDoc } = deps.firestoreModule;
+                        const userRef = doc(deps.db, 'users', deps.auth.currentUser.uid);
                         const docSnap = await getDoc(userRef);
 
                         if (docSnap.exists()) {
@@ -178,21 +202,9 @@ export const useWatchlistStore = create<WatchlistState>()(
         {
             name: 'watchlist-storage',
             storage: createJSONStorage(() => ({
-                getItem: (_name: string) => {
-                    const uid = auth?.currentUser?.uid || localStorage.getItem("watchlist-user-id");
-                    const key = uid ? `watchlist-storage-${uid}` : "watchlist-storage-guest";
-                    return localStorage.getItem(key);
-                },
-                setItem: (_name: string, value: string) => {
-                    const uid = auth?.currentUser?.uid || localStorage.getItem("watchlist-user-id");
-                    const key = uid ? `watchlist-storage-${uid}` : "watchlist-storage-guest";
-                    localStorage.setItem(key, value);
-                },
-                removeItem: (_name: string) => {
-                    const uid = auth?.currentUser?.uid || localStorage.getItem("watchlist-user-id");
-                    const key = uid ? `watchlist-storage-${uid}` : "watchlist-storage-guest";
-                    localStorage.removeItem(key);
-                }
+                getItem: (_name: string) => localStorage.getItem(getUserStorageKey()),
+                setItem: (_name: string, value: string) => localStorage.setItem(getUserStorageKey(), value),
+                removeItem: (_name: string) => localStorage.removeItem(getUserStorageKey())
             }))
         }
     )

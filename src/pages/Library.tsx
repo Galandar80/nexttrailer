@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, lazy, Suspense } from "react";
 import { Link } from "react-router-dom";
 import { DayContentProps } from "react-day-picker";
 import { CalendarDays, Film, Trash2, Tv, CheckCircle2 } from "lucide-react";
@@ -6,7 +6,9 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import MovieCard from "@/components/MovieCard";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
+const Calendar = lazy(() =>
+  import("@/components/ui/calendar").then((mod) => ({ default: mod.Calendar }))
+);
 import { useLibraryStore, LibraryItem, LibraryStatus } from "@/store/useLibraryStore";
 import { useToast } from "@/hooks/use-toast";
 import { tmdbApi, MediaItem } from "@/services/tmdbApi";
@@ -50,6 +52,7 @@ const statusLabels: Record<LibraryStatus, string> = {
   completed: "Completato",
   dropped: "Abbandonato"
 };
+const PAGE_SIZE = 24;
 
 const Library = () => {
   const { items, removeItem, updateStatus, markMovieWatched } = useLibraryStore();
@@ -63,6 +66,7 @@ const Library = () => {
   const [watchedHours, setWatchedHours] = useState(0);
   const [isLoadingWatchedHours, setIsLoadingWatchedHours] = useState(false);
   const [tvTotals, setTvTotals] = useState<Record<number, number>>({});
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   useEffect(() => {
     const loadEvents = async () => {
@@ -251,24 +255,42 @@ const Library = () => {
     return Object.values(item.episodeProgress).flat().length;
   };
 
-  const movieCount = items.filter((item) => item.media_type === "movie").length;
-  const tvCount = items.filter((item) => item.media_type === "tv").length;
-  const watchedEpisodesCount = items.reduce((total, item) => {
-    if (item.media_type !== "tv" || !item.episodeProgress) return total;
-    const episodes = Object.values(item.episodeProgress).flat();
-    return total + episodes.length;
-  }, 0);
+  const movieCount = useMemo(
+    () => items.filter((item) => item.media_type === "movie").length,
+    [items]
+  );
+  const tvCount = useMemo(
+    () => items.filter((item) => item.media_type === "tv").length,
+    [items]
+  );
+  const watchedEpisodesCount = useMemo(
+    () =>
+      items.reduce((total, item) => {
+        if (item.media_type !== "tv" || !item.episodeProgress) return total;
+        const episodes = Object.values(item.episodeProgress).flat();
+        return total + episodes.length;
+      }, 0),
+    [items]
+  );
 
-  const filteredItems = items.filter((item) => {
-    const statusMatch = statusFilter === "all" ? true : item.status === statusFilter;
-    const typeMatch = typeFilter === "all" ? true : item.media_type === typeFilter;
-    return statusMatch && typeMatch;
-  });
+  const filteredItems = useMemo(() => {
+    const statusMatch = (item: LibraryItem) =>
+      statusFilter === "all" ? true : item.status === statusFilter;
+    const typeMatch = (item: LibraryItem) =>
+      typeFilter === "all" ? true : item.media_type === typeFilter;
+    return items.filter((item) => statusMatch(item) && typeMatch(item));
+  }, [items, statusFilter, typeFilter]);
+  const visibleItems = useMemo(
+    () => filteredItems.slice(0, visibleCount),
+    [filteredItems, visibleCount]
+  );
 
   const selectedKey = selectedDate ? toDateKey(selectedDate) : "";
-  const eventsForSelected = selectedKey
-    ? events.filter((event) => toDateKey(event.date) === selectedKey)
-    : [];
+  const eventsForSelected = useMemo(() => {
+    return selectedKey
+      ? events.filter((event) => toDateKey(event.date) === selectedKey)
+      : [];
+  }, [events, selectedKey]);
 
   const eventDates = useMemo(() => {
     return events.map((event) => new Date(event.date));
@@ -282,6 +304,16 @@ const Library = () => {
       return acc;
     }, {});
   }, [events]);
+  
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [statusFilter, typeFilter]);
+
+  useEffect(() => {
+    if (visibleCount > filteredItems.length) {
+      setVisibleCount(Math.max(PAGE_SIZE, filteredItems.length));
+    }
+  }, [filteredItems.length, visibleCount]);
 
   if (!canAccess) {
     return (
@@ -368,68 +400,70 @@ const Library = () => {
                 <CalendarDays className="h-6 w-6 text-accent" />
                 <h2 className="text-2xl font-semibold">Calendario episodi</h2>
               </div>
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={setSelectedDate}
-                modifiers={{ hasEvent: eventDates }}
-                className="w-full"
-                components={{
-                  DayContent: ({ date }: DayContentProps) => {
-                    const dayEvents = eventsByDate[toDateKey(date)] ?? [];
-                    const visibleEvents = dayEvents.slice(0, 2);
-                    const extraCount = dayEvents.length - visibleEvents.length;
-                    return (
-                      <div className="flex h-full w-full flex-col gap-2">
-                        <span className="text-base md:text-lg font-semibold">{date.getDate()}</span>
-                        <div className="flex flex-col gap-1 text-[0.7rem] md:text-xs font-normal text-muted-foreground">
-                          {visibleEvents.map((event) => (
-                            <span
-                              key={`${event.media_type}-${event.id}-${event.date}`}
-                              className="line-clamp-2 text-foreground"
-                            >
-                              {event.title}
-                            </span>
-                          ))}
-                          {extraCount > 0 && (
-                            <span className="text-muted-foreground">+{extraCount} altri</span>
-                          )}
+              <Suspense fallback={<div className="h-[520px] w-full rounded-2xl bg-secondary/20 animate-pulse" />}>
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={setSelectedDate}
+                  modifiers={{ hasEvent: eventDates }}
+                  className="w-full"
+                  components={{
+                    DayContent: ({ date }: DayContentProps) => {
+                      const dayEvents = eventsByDate[toDateKey(date)] ?? [];
+                      const visibleEvents = dayEvents.slice(0, 2);
+                      const extraCount = dayEvents.length - visibleEvents.length;
+                      return (
+                        <div className="flex h-full w-full flex-col gap-2">
+                          <span className="text-base md:text-lg font-semibold">{date.getDate()}</span>
+                          <div className="flex flex-col gap-1 text-[0.7rem] md:text-xs font-normal text-muted-foreground">
+                            {visibleEvents.map((event) => (
+                              <span
+                                key={`${event.media_type}-${event.id}-${event.date}`}
+                                className="line-clamp-2 text-foreground"
+                              >
+                                {event.title}
+                              </span>
+                            ))}
+                            {extraCount > 0 && (
+                              <span className="text-muted-foreground">+{extraCount} altri</span>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  }
-                }}
-                classNames={{
-                  months: "flex w-full flex-col",
-                  month: "w-full space-y-4",
-                  caption: "flex items-center justify-center relative",
-                  caption_label: "text-2xl md:text-3xl font-semibold tracking-wide",
-                  nav: "flex items-center gap-2",
-                  nav_button: "h-9 w-9 rounded-full border border-input bg-background/60 hover:bg-background",
-                  nav_button_previous: "absolute left-2",
-                  nav_button_next: "absolute right-2",
-                  table: "w-full border-collapse",
-                  head_row: "grid grid-cols-7 gap-2",
-                  head_cell:
-                    "text-muted-foreground text-sm md:text-base font-medium text-center py-2",
-                  row: "grid grid-cols-7 gap-2 mt-2",
-                  cell:
-                    "h-20 md:h-24 lg:h-28 w-full text-left align-top p-0 relative rounded-xl border border-secondary/40 bg-background/60",
-                  day:
-                    "h-full w-full flex items-start justify-start rounded-xl px-3 py-2 aria-selected:bg-accent aria-selected:text-accent-foreground",
-                  day_selected:
-                    "bg-accent text-accent-foreground hover:bg-accent hover:text-accent-foreground",
-                  day_today: "bg-secondary/50 text-foreground",
-                  day_outside:
-                    "text-muted-foreground/50 bg-background/30 aria-selected:bg-background/40",
-                  day_disabled: "text-muted-foreground/50",
-                  day_hidden: "invisible"
-                }}
-                modifiersClassNames={{
-                  hasEvent:
-                    "relative after:absolute after:bottom-2 after:left-3 after:h-2 after:w-2 after:rounded-full after:bg-accent"
-                }}
-              />
+                      );
+                    }
+                  }}
+                  classNames={{
+                    months: "flex w-full flex-col",
+                    month: "w-full space-y-4",
+                    caption: "flex items-center justify-center relative",
+                    caption_label: "text-2xl md:text-3xl font-semibold tracking-wide",
+                    nav: "flex items-center gap-2",
+                    nav_button: "h-9 w-9 rounded-full border border-input bg-background/60 hover:bg-background",
+                    nav_button_previous: "absolute left-2",
+                    nav_button_next: "absolute right-2",
+                    table: "w-full border-collapse",
+                    head_row: "grid grid-cols-7 gap-2",
+                    head_cell:
+                      "text-muted-foreground text-sm md:text-base font-medium text-center py-2",
+                    row: "grid grid-cols-7 gap-2 mt-2",
+                    cell:
+                      "h-20 md:h-24 lg:h-28 w-full text-left align-top p-0 relative rounded-xl border border-secondary/40 bg-background/60",
+                    day:
+                      "h-full w-full flex items-start justify-start rounded-xl px-3 py-2 aria-selected:bg-accent aria-selected:text-accent-foreground",
+                    day_selected:
+                      "bg-accent text-accent-foreground hover:bg-accent hover:text-accent-foreground",
+                    day_today: "bg-secondary/50 text-foreground",
+                    day_outside:
+                      "text-muted-foreground/50 bg-background/30 aria-selected:bg-background/40",
+                    day_disabled: "text-muted-foreground/50",
+                    day_hidden: "invisible"
+                  }}
+                  modifiersClassNames={{
+                    hasEvent:
+                      "relative after:absolute after:bottom-2 after:left-3 after:h-2 after:w-2 after:rounded-full after:bg-accent"
+                  }}
+                />
+              </Suspense>
             </div>
 
             <div className="bg-secondary/20 rounded-2xl p-6 mb-8">
@@ -547,7 +581,7 @@ const Library = () => {
             </div>
 
             <div className="content-grid">
-              {filteredItems.map((item) => {
+              {visibleItems.map((item) => {
                 const watched = getWatchedCountForItem(item);
                 const total = tvTotals[item.id];
                 const remaining =
@@ -601,6 +635,16 @@ const Library = () => {
                 );
               })}
             </div>
+            {filteredItems.length > visibleCount && (
+              <div className="mt-8 flex justify-center">
+                <Button
+                  variant="outline"
+                  onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
+                >
+                  Carica altri
+                </Button>
+              </div>
+            )}
           </>
         )}
       </main>

@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
 import { Film, Trash2 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -8,10 +9,13 @@ import { useWatchlistStore } from "@/store/useWatchlistStore";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/auth-core";
 
+const PAGE_SIZE = 24;
+
 const Watchlist = () => {
     const { items, removeItem, clearWatchlist } = useWatchlistStore();
     const { toast } = useToast();
     const { user, canAccess, signInWithGoogle, sendVerificationEmail } = useAuth();
+    const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
     const handleRemove = (id: number, mediaType: 'movie' | 'tv', title: string) => {
         removeItem(id, mediaType);
@@ -33,8 +37,24 @@ const Watchlist = () => {
         }
     };
 
-    const movieCount = items.filter(item => item.media_type === 'movie').length;
-    const tvCount = items.filter(item => item.media_type === 'tv').length;
+    const movieCount = useMemo(
+        () => items.filter(item => item.media_type === 'movie').length,
+        [items]
+    );
+    const tvCount = useMemo(
+        () => items.filter(item => item.media_type === 'tv').length,
+        [items]
+    );
+    const visibleItems = useMemo(
+        () => items.slice(0, visibleCount),
+        [items, visibleCount]
+    );
+
+    useEffect(() => {
+        if (visibleCount > items.length) {
+            setVisibleCount(Math.max(PAGE_SIZE, items.length));
+        }
+    }, [items.length, visibleCount]);
 
     if (!canAccess) {
         return (
@@ -129,25 +149,37 @@ const Watchlist = () => {
                         </Link>
                     </div>
                 ) : (
-                    <div className="content-grid">
-                        {items.map((item) => (
-                            <div key={`${item.media_type}-${item.id}`} className="relative group">
-                                <MovieCard media={item} />
+                    <>
+                        <div className="content-grid">
+                            {visibleItems.map((item) => (
+                                <div key={`${item.media_type}-${item.id}`} className="relative group">
+                                    <MovieCard media={item} />
+                                    <Button
+                                        variant="destructive"
+                                        size="icon"
+                                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                        onClick={() => handleRemove(
+                                            item.id,
+                                            item.media_type as "movie" | "tv",
+                                            item.title || item.name || 'Contenuto'
+                                        )}
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            ))}
+                        </div>
+                        {items.length > visibleCount && (
+                            <div className="mt-8 flex justify-center">
                                 <Button
-                                    variant="destructive"
-                                    size="icon"
-                                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                                    onClick={() => handleRemove(
-                                        item.id,
-                                        item.media_type as "movie" | "tv",
-                                        item.title || item.name || 'Contenuto'
-                                    )}
+                                    variant="outline"
+                                    onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
                                 >
-                                    <Trash2 className="h-4 w-4" />
+                                    Carica altri
                                 </Button>
                             </div>
-                        ))}
-                    </div>
+                        )}
+                    </>
                 )}
             </main>
 
