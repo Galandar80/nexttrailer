@@ -36,6 +36,7 @@ type NewsArticle = {
 
 const STORAGE_KEY = "news-articles";
 const COMINGSOON_STORAGE_KEY = "comingsoon-articles";
+const LOCAL_REFRESH_KEY = "news-last-refresh";
 const DEFAULT_FEED_URL = "https://www.bestmovie.it/feed/";
 const COMINGSOON_FEED_URL = "https://www.comingsoon.it/feedrss/cinema";
 const MAX_ARTICLES = 3;
@@ -420,7 +421,6 @@ const News = () => {
   }, []);
 
   const refreshComingsoon = useCallback(async () => {
-    if (!isFirebaseEnabled || !db) return;
     try {
       const cached = normalizeComingsoonArticles(parseStoredArticles(localStorage.getItem(COMINGSOON_STORAGE_KEY)));
       const cachedMap = new Map(cached.map((item) => [item.id, item]));
@@ -431,41 +431,49 @@ const News = () => {
       for (const item of items) {
         const docId = toDocId(item.link);
         const cachedItem = cachedMap.get(docId);
+        let resolved = false;
         if (cachedItem) {
           refreshed.push(cachedItem);
           refreshedIds.add(docId);
-          continue;
+          resolved = true;
         }
-        const docRef = doc(db, "news_comingsoon", docId);
-        const existing = await getDoc(docRef);
-        if (existing.exists()) {
-          const existingData = existing.data() as NewsArticle;
-          const normalized = withPublicId({ ...existingData, id: existingData.id || docId });
-          if (!existingData.publicId && normalized.publicId) {
-            void setDoc(docRef, { publicId: normalized.publicId }, { merge: true });
+        if (!resolved && isFirebaseEnabled && db) {
+          const docRef = doc(db, "news_comingsoon", docId);
+          const existing = await getDoc(docRef);
+          if (existing.exists()) {
+            const existingData = existing.data() as NewsArticle;
+            const normalized = withPublicId({ ...existingData, id: existingData.id || docId });
+            if (!existingData.publicId && normalized.publicId) {
+              void setDoc(docRef, { publicId: normalized.publicId }, { merge: true });
+            }
+            refreshed.push(normalized);
+            refreshedIds.add(docId);
+            resolved = true;
           }
-          refreshed.push(normalized);
-          refreshedIds.add(docId);
-          continue;
         }
-        const { title, subtitle, body, bullets } = await rewriteWithMinWords(item);
-        const publishedAtTs = Date.parse(item.publishedAt) || Date.now();
-        const created = {
-          id: docId,
-          publicId: toPublicId(item.link),
-          title,
-          subtitle,
-          body,
-          bullets,
-          imageUrl: item.imageUrl,
-          sourceUrl: item.link,
-          sourceTitle: item.title,
-          publishedAt: item.publishedAt,
-          publishedAtTs
-        };
-        refreshed.push(created);
-        refreshedIds.add(docId);
-        await setDoc(docRef, created, { merge: true });
+        if (!resolved) {
+          const { title, subtitle, body, bullets } = await rewriteWithMinWords(item);
+          const publishedAtTs = Date.parse(item.publishedAt) || Date.now();
+          const created = {
+            id: docId,
+            publicId: toPublicId(item.link),
+            title,
+            subtitle,
+            body,
+            bullets,
+            imageUrl: item.imageUrl,
+            sourceUrl: item.link,
+            sourceTitle: item.title,
+            publishedAt: item.publishedAt,
+            publishedAtTs
+          };
+          refreshed.push(created);
+          refreshedIds.add(docId);
+          if (isFirebaseEnabled && db) {
+            const docRef = doc(db, "news_comingsoon", docId);
+            await setDoc(docRef, created, { merge: true });
+          }
+        }
       }
       const merged = [
         ...refreshed,
@@ -545,6 +553,7 @@ const News = () => {
       setArticles(merged.slice(0, PAGE_SIZE));
       setHasMore(merged.length > PAGE_SIZE);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      localStorage.setItem(LOCAL_REFRESH_KEY, String(Date.now()));
       if (isFirebaseEnabled && db) {
         const metaRef = doc(db, "news_meta", "global");
         await setDoc(metaRef, { lastRefreshAt: Date.now() }, { merge: true });
@@ -622,13 +631,20 @@ const News = () => {
   useEffect(() => {
     const autoRefresh = async () => {
       if (autoRefreshDone) return;
-      if (!isFirebaseEnabled || !db) return;
       setAutoRefreshDone(true);
       try {
-        const metaRef = doc(db, "news_meta", "global");
-        const snapshot = await getDoc(metaRef);
-        const lastRefreshAt = snapshot.exists() ? (snapshot.data().lastRefreshAt as number | undefined) : undefined;
-        if (!lastRefreshAt || Date.now() - lastRefreshAt > AUTO_REFRESH_MS) {
+        const now = Date.now();
+        let lastRefreshAt: number | undefined;
+        if (isFirebaseEnabled && db) {
+          const metaRef = doc(db, "news_meta", "global");
+          const snapshot = await getDoc(metaRef);
+          lastRefreshAt = snapshot.exists() ? (snapshot.data().lastRefreshAt as number | undefined) : undefined;
+        } else {
+          const stored = localStorage.getItem(LOCAL_REFRESH_KEY);
+          const parsed = stored ? Number(stored) : NaN;
+          lastRefreshAt = Number.isFinite(parsed) ? parsed : undefined;
+        }
+        if (!lastRefreshAt || now - lastRefreshAt > AUTO_REFRESH_MS) {
           await handleRefresh();
         }
       } catch {
