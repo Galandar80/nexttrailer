@@ -62,6 +62,7 @@ const Library = () => {
   const [typeFilter, setTypeFilter] = useState<"all" | "movie" | "tv">("all");
   const [watchedHours, setWatchedHours] = useState(0);
   const [isLoadingWatchedHours, setIsLoadingWatchedHours] = useState(false);
+  const [tvTotals, setTvTotals] = useState<Record<number, number>>({});
 
   useEffect(() => {
     const loadEvents = async () => {
@@ -181,6 +182,46 @@ const Library = () => {
     };
   }, [items]);
 
+  useEffect(() => {
+    let isMounted = true;
+    const loadTotals = async () => {
+      const tvItems = items.filter((item) => item.media_type === "tv");
+      if (tvItems.length === 0) {
+        if (Object.keys(tvTotals).length > 0) {
+          setTvTotals({});
+        }
+        return;
+      }
+      const missing = tvItems.filter((item) => tvTotals[item.id] === undefined);
+      if (missing.length === 0) return;
+      const results = await Promise.all(
+        missing.map(async (item) => {
+          try {
+            const details = await tmdbApi.getDetails(item.id, "tv");
+            const total = (details as { number_of_episodes?: number }).number_of_episodes;
+            return { id: item.id, total };
+          } catch {
+            return { id: item.id, total: undefined };
+          }
+        })
+      );
+      if (!isMounted) return;
+      setTvTotals((prev) => {
+        const next = { ...prev };
+        results.forEach(({ id, total }) => {
+          if (typeof total === "number" && Number.isFinite(total)) {
+            next[id] = total;
+          }
+        });
+        return next;
+      });
+    };
+    loadTotals();
+    return () => {
+      isMounted = false;
+    };
+  }, [items, tvTotals]);
+
   const handleRemove = async (item: LibraryItem) => {
     await removeItem(item.id, item.media_type);
     toast({
@@ -203,6 +244,11 @@ const Library = () => {
       title: "Segnato come visto",
       description: `${item.title || item.name || "Film"} è stato aggiornato`
     });
+  };
+
+  const getWatchedCountForItem = (item: LibraryItem) => {
+    if (item.media_type !== "tv" || !item.episodeProgress) return 0;
+    return Object.values(item.episodeProgress).flat().length;
   };
 
   const movieCount = items.filter((item) => item.media_type === "movie").length;
@@ -501,44 +547,59 @@ const Library = () => {
             </div>
 
             <div className="content-grid">
-              {filteredItems.map((item) => (
-                <div key={`${item.media_type}-${item.id}`} className="relative group">
-                  <MovieCard media={toMediaItem(item)} />
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <select
-                      className="bg-secondary/40 text-sm rounded-md px-2 py-1 border border-muted/30"
-                      value={item.status}
-                      onChange={(e) => handleStatusChange(item, e.target.value as LibraryStatus)}
-                    >
-                      {Object.entries(statusLabels).map(([key, label]) => (
-                        <option key={key} value={key}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                    {item.media_type === "movie" && (
+              {filteredItems.map((item) => {
+                const watched = getWatchedCountForItem(item);
+                const total = tvTotals[item.id];
+                const remaining =
+                  typeof total === "number" && Number.isFinite(total)
+                    ? Math.max(total - watched, 0)
+                    : undefined;
+                return (
+                  <div key={`${item.media_type}-${item.id}`} className="relative group">
+                    <MovieCard media={toMediaItem(item)} />
+                    {item.media_type === "tv" && (
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        {typeof remaining === "number"
+                          ? `${watched} visti · ${remaining} mancanti`
+                          : `${watched} visti`}
+                      </div>
+                    )}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <select
+                        className="bg-secondary/40 text-sm rounded-md px-2 py-1 border border-muted/30"
+                        value={item.status}
+                        onChange={(e) => handleStatusChange(item, e.target.value as LibraryStatus)}
+                      >
+                        {Object.entries(statusLabels).map(([key, label]) => (
+                          <option key={key} value={key}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                      {item.media_type === "movie" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1"
+                          onClick={() => handleMarkWatched(item)}
+                        >
+                          <CheckCircle2 className="h-4 w-4" />
+                          Visto
+                        </Button>
+                      )}
                       <Button
-                        variant="outline"
+                        variant="destructive"
                         size="sm"
                         className="gap-1"
-                        onClick={() => handleMarkWatched(item)}
+                        onClick={() => handleRemove(item)}
                       >
-                        <CheckCircle2 className="h-4 w-4" />
-                        Visto
+                        <Trash2 className="h-4 w-4" />
+                        Rimuovi
                       </Button>
-                    )}
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      className="gap-1"
-                      onClick={() => handleRemove(item)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Rimuovi
-                    </Button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}
