@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { ArrowLeft, Film, Star, Calendar } from "lucide-react";
 import { tmdbApi } from "@/services/tmdbApi";
@@ -118,6 +118,28 @@ const PersonDetailsPage = () => {
     };
 
     const filteredCredits = credits.filter(c => filter === 'all' || c.media_type === filter);
+    const baseUrl = (import.meta?.env?.VITE_PUBLIC_SITE_URL || "").replace(/\/$/, "");
+    const seoUrl = useMemo(() => {
+        if (typeof window !== "undefined") return window.location.href;
+        if (baseUrl && id) return `${baseUrl}/person/${id}`;
+        return baseUrl || "";
+    }, [baseUrl, id]);
+    const seoJsonLd = useMemo(() => {
+        if (!actor) return null;
+        const image = actor.profile_path ? tmdbApi.getImageUrl(actor.profile_path, "w500") : undefined;
+        const description = translatedBio || actor.biography || undefined;
+        return {
+            "@context": "https://schema.org",
+            "@type": "Person",
+            name: actor.name,
+            image,
+            description,
+            birthDate: actor.birthday || undefined,
+            deathDate: actor.deathday || undefined,
+            jobTitle: actor.known_for_department || undefined,
+            url: seoUrl || undefined
+        };
+    }, [actor, seoUrl, translatedBio]);
 
     if (isLoading) {
         return (
@@ -148,6 +170,8 @@ const PersonDetailsPage = () => {
                 title={actor.name}
                 description={`Biografia, filmografia e dettagli di ${actor.name}`}
                 image={actor.profile_path ? tmdbApi.getImageUrl(actor.profile_path, "w500") : undefined}
+                url={seoUrl || undefined}
+                jsonLd={seoJsonLd || undefined}
             />
             <Navbar />
 

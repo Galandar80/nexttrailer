@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { tmdbApi, MediaItem } from "@/services/tmdbApi";
 import { API_URL, fetchWithRetry } from "@/services/api/config";
 import { useAuth } from "@/context/auth-core";
+import { SEO } from "@/components/SEO";
 
 type LibraryEvent = {
   id: number;
@@ -318,6 +319,7 @@ const Library = () => {
   if (!canAccess) {
     return (
       <div className="min-h-screen bg-background text-foreground">
+        <SEO title="Storico" description="Il tuo storico personale" robots="noindex, nofollow" />
         <Navbar />
         <main className="max-w-screen-xl mx-auto px-4 md:px-8 py-20">
           <div className="text-center max-w-xl mx-auto">
@@ -344,6 +346,7 @@ const Library = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <SEO title="Storico" description="Il tuo storico personale" robots="noindex, nofollow" />
       <Navbar />
 
       <main className="max-w-screen-xl mx-auto px-4 md:px-8 py-8">

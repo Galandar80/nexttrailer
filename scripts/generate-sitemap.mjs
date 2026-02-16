@@ -45,10 +45,7 @@ const staticRoutes = [
   "/tv",
   "/oscar",
   "/news",
-  "/news/archivio",
-  "/watchlist",
-  "/storico",
-  "/preferenze"
+  "/news/archivio"
 ];
 
 const escapeXml = (value) =>
@@ -92,8 +89,10 @@ const fetchCollection = async (collection) => {
       const fields = doc.fields || {};
       const publishedAt = getFieldValue(fields, "publishedAt");
       const publishedAtTs = getFieldValue(fields, "publishedAtTs");
+      const publicId = getFieldValue(fields, "publicId");
       entries.push({
         id,
+        publicId,
         lastmod: publishedAtTs ? formatLastmod(publishedAtTs) : formatLastmod(publishedAt)
       });
     }
@@ -114,11 +113,14 @@ const build = async () => {
   ]);
 
   const articleUrls = [...newsArticles, ...comingsoonArticles]
-    .filter((entry) => entry.id)
-    .map((entry) => ({
-      loc: `${baseUrl}/news/${entry.id}`,
-      lastmod: entry.lastmod || today
-    }));
+    .filter((entry) => entry.id || entry.publicId)
+    .map((entry) => {
+      const slug = entry.publicId || entry.id;
+      return {
+        loc: `${baseUrl}/news/${slug}`,
+        lastmod: entry.lastmod || today
+      };
+    });
 
   const allUrls = [...urls, ...articleUrls];
   const xml = [

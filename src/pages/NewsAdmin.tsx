@@ -441,7 +441,7 @@ const NewsAdmin = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <SEO title="Gestione News" description="Gestione news" />
+      <SEO title="Gestione News" description="Gestione news" robots="noindex, nofollow" />
       <Navbar />
 
       <main className="max-w-screen-xl mx-auto px-4 md:px-8 py-8 space-y-6">

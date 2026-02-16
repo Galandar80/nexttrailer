@@ -1,5 +1,5 @@
 
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, lazy, Suspense, useMemo } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Image, Film } from "lucide-react";
 import { tmdbApi, MediaDetails as MediaDetailsType, MediaItem, Trailer } from "@/services/tmdbApi";
@@ -339,6 +339,49 @@ const MediaDetailsPage = () => {
 
   const handleShowTrivia = () => setShowTrivia(!showTrivia);
   const handleWatchNow = () => setShowWatchProviders(true);
+  const baseUrl = (import.meta?.env?.VITE_PUBLIC_SITE_URL || "").replace(/\/$/, "");
+  const seoUrl = useMemo(() => {
+    if (typeof window !== "undefined") return window.location.href;
+    if (baseUrl && mediaType && id) return `${baseUrl}/${mediaType}/${id}`;
+    return baseUrl || "";
+  }, [baseUrl, id, mediaType]);
+  const seoJsonLd = useMemo(() => {
+    if (!media) return null;
+    const titleValue = mediaType === "movie" ? media.title : media.name;
+    const releaseDateValue = mediaType === "movie" ? media.release_date : media.first_air_date;
+    const backdrop = media.backdrop_path ? tmdbApi.getImageUrl(media.backdrop_path, "original") : "";
+    const poster = media.poster_path ? tmdbApi.getImageUrl(media.poster_path, "w500") : "";
+    const images = [backdrop, poster].filter(Boolean);
+    const ratingValue = media.vote_average ? Number(media.vote_average.toFixed(1)) : undefined;
+    const ratingCount = media.vote_count || undefined;
+    const genres = media.genres?.map((genre) => genre.name).filter(Boolean) || [];
+    const directorValue = media.credits?.crew?.find(person => person.job === "Director");
+    const creatorsValue = media.created_by || [];
+    const schema: Record<string, unknown> = {
+      "@context": "https://schema.org",
+      "@type": mediaType === "movie" ? "Movie" : "TVSeries",
+      name: titleValue || undefined,
+      description: media.overview || undefined,
+      image: images.length ? images : undefined,
+      datePublished: releaseDateValue || undefined,
+      url: seoUrl || undefined,
+      genre: genres.length ? genres : undefined
+    };
+    if (ratingValue) {
+      schema.aggregateRating = {
+        "@type": "AggregateRating",
+        ratingValue,
+        ratingCount
+      };
+    }
+    if (mediaType === "movie" && directorValue?.name) {
+      schema.director = { "@type": "Person", name: directorValue.name };
+    }
+    if (mediaType === "tv" && creatorsValue.length) {
+      schema.creator = creatorsValue.map((creator) => ({ "@type": "Person", name: creator.name }));
+    }
+    return schema;
+  }, [media, mediaType, seoUrl]);
 
   if (isLoading) {
     return (
@@ -418,6 +461,8 @@ const MediaDetailsPage = () => {
           description={media.overview?.substring(0, 160) || `Scopri tutto su ${title}`}
           image={backdropUrl}
           type={mediaType === "movie" ? "video.movie" : "video.tv_show"}
+          url={seoUrl || undefined}
+          jsonLd={seoJsonLd || undefined}
         />
       )}
       <Navbar />

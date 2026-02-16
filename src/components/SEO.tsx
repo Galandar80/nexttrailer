@@ -8,6 +8,7 @@ interface SEOProps {
     image?: string;
     type?: 'website' | 'article' | 'video.movie' | 'video.tv_show';
     url?: string;
+    robots?: string;
     publishedTime?: string;
     modifiedTime?: string;
     author?: string;
@@ -22,6 +23,7 @@ export const SEO = ({
     image = "/og-image.png",
     type = "website",
     url,
+    robots = "index, follow",
     publishedTime,
     modifiedTime,
     author,
@@ -31,8 +33,9 @@ export const SEO = ({
 }: SEOProps) => {
     const siteTitle = "NextTrailer";
     const fullTitle = title === siteTitle ? title : `${title} | ${siteTitle}`;
-    const resolvedUrl = url || (typeof window !== "undefined" ? window.location.href : "");
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const baseUrl = (import.meta?.env?.VITE_PUBLIC_SITE_URL || "").replace(/\/$/, "");
+    const resolvedUrl = url || (typeof window !== "undefined" ? window.location.href : baseUrl || "");
+    const origin = typeof window !== "undefined" ? window.location.origin : baseUrl;
 
     const fullImage = image.startsWith('http') ? image : origin ? `${origin}${image}` : image;
     const jsonLdString = typeof jsonLd === "string" ? jsonLd : jsonLd ? JSON.stringify(jsonLd) : "";
@@ -41,7 +44,7 @@ export const SEO = ({
         <Helmet>
             <title>{fullTitle}</title>
             <meta name="description" content={description} />
-            <meta name="robots" content="index, follow" />
+            <meta name="robots" content={robots} />
             <link rel="canonical" href={resolvedUrl} />
 
             <meta property="og:type" content={type} />

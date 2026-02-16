@@ -92,7 +92,7 @@ const Preferences = () => {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <SEO title="Preferenze" description="Gestisci le preferenze del tuo account" />
+      <SEO title="Preferenze" description="Gestisci le preferenze del tuo account" robots="noindex, nofollow" />
       <Navbar />
 
       <main className="max-w-screen-md mx-auto px-4 md:px-8 py-10 space-y-10">
