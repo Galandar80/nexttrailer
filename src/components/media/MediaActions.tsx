@@ -1,12 +1,13 @@
 
 import React from 'react';
-import { Play, Film, Star, Tv, Bookmark, Share2, Image, FileText } from "lucide-react";
+import { Play, Film, Star, Tv, Bookmark, Share2, Image, FileText, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface MediaActionsProps {
     onWatchNow: () => void;
     onPlayTrailer: () => void;
     onShowReviews: () => void;
+    onShowComments: () => void;
     onShowSeasons: () => void;
     onAddToWatchlist: () => void;
     onToggleLibrary: () => void;
@@ -24,6 +25,7 @@ export const MediaActions = ({
     onWatchNow,
     onPlayTrailer,
     onShowReviews,
+    onShowComments,
     onShowSeasons,
     onAddToWatchlist,
     onToggleLibrary,
@@ -62,6 +64,13 @@ export const MediaActions = ({
             >
                 <Star className="h-4 w-4" />
                 Recensioni
+            </Button>
+            <Button
+                className="gap-2"
+                onClick={onShowComments}
+            >
+                <MessageCircle className="h-4 w-4" />
+                Commenti
             </Button>
 
             {mediaType === "tv" && (

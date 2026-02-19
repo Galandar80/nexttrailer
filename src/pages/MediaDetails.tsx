@@ -1,5 +1,5 @@
 
-import { useState, useEffect, lazy, Suspense, useMemo } from "react";
+import { useState, useEffect, lazy, Suspense, useMemo, useCallback, FormEvent, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Image, Film } from "lucide-react";
 import { tmdbApi, MediaDetails as MediaDetailsType, MediaItem, Trailer } from "@/services/tmdbApi";
@@ -9,6 +9,7 @@ import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import ActorCard from "@/components/ActorCard";
+import { getDb, getFirestoreModule, isFirebaseEnabled } from "@/services/firebase";
 const MediaReviews = lazy(() => import("@/components/MediaReviews"));
 const TvSeasons = lazy(() => import("@/components/TvSeasons"));
 const MediaGallery = lazy(() => import("@/components/MediaGallery"));
@@ -30,6 +31,22 @@ const WatchProvidersDialog = lazy(() =>
 );
 import { useAuth } from "@/context/auth-core";
 
+type MediaComment = {
+  id: string;
+  userId: string;
+  userName: string;
+  text: string;
+  createdAt?: Date | null;
+};
+
+type MediaRating = {
+  id: string;
+  userId: string;
+  userName: string;
+  rating: number;
+  updatedAt?: Date | null;
+};
+
 const MediaDetailsPage = () => {
   const { mediaType, id } = useParams<{ mediaType: "movie" | "tv", id: string }>();
   const navigate = useNavigate();
@@ -49,13 +66,26 @@ const MediaDetailsPage = () => {
     facts: [],
     controversies: []
   });
+  const [comments, setComments] = useState<MediaComment[]>([]);
+  const [isCommentsLoading, setIsCommentsLoading] = useState(false);
+  const [ratings, setRatings] = useState<MediaRating[]>([]);
+  const [isRatingsLoading, setIsRatingsLoading] = useState(false);
+  const [ratingValue, setRatingValue] = useState(0);
+  const [ratingError, setRatingError] = useState<string | null>(null);
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+  const [commentText, setCommentText] = useState("");
+  const [commentError, setCommentError] = useState<string | null>(null);
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [isDeletingCommentId, setIsDeletingCommentId] = useState<string | null>(null);
   const { toast } = useToast();
   const { addItem, removeItem, isInWatchlist } = useWatchlistStore();
   const { addItem: addLibraryItem, removeItem: removeLibraryItem, getItem, markMovieWatched } = useLibraryStore();
-  const { canAccess } = useAuth();
+  const { canAccess, user } = useAuth();
+  const isSuperAdmin = user?.email?.toLowerCase() === "calisma82@gmail.com";
 
   /* Background Trailer State */
   const [showBackgroundTrailer, setShowBackgroundTrailer] = useState(false);
+  const commentsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -127,6 +157,297 @@ const MediaDetailsPage = () => {
       isMounted = false;
     };
   }, [mediaType, id, toast]);
+
+  const loadComments = useCallback(async () => {
+    if (!id || !mediaType) return;
+    if (!isFirebaseEnabled) {
+      setComments([]);
+      setIsCommentsLoading(false);
+      return;
+    }
+    setIsCommentsLoading(true);
+    setCommentError(null);
+    try {
+      const db = await getDb();
+      const firestore = await getFirestoreModule();
+      if (!db) {
+        setCommentError("Firebase non configurato");
+        setComments([]);
+        return;
+      }
+      const { collection, getDocs, query, where, orderBy, limit } = firestore;
+      let snapshot;
+      try {
+        const commentsQuery = query(
+          collection(db, "media_comments"),
+          where("mediaId", "==", Number(id)),
+          where("mediaType", "==", mediaType),
+          orderBy("createdAt", "desc"),
+          limit(50)
+        );
+        snapshot = await getDocs(commentsQuery);
+      } catch (error) {
+        const fallbackQuery = query(
+          collection(db, "media_comments"),
+          where("mediaId", "==", Number(id)),
+          where("mediaType", "==", mediaType),
+          limit(50)
+        );
+        snapshot = await getDocs(fallbackQuery);
+      }
+      const items = snapshot.docs.map((entry) => {
+        const data = entry.data() as Omit<MediaComment, "id" | "createdAt"> & { createdAt?: { toDate?: () => Date } | string };
+        const createdAt = data.createdAt && typeof data.createdAt !== "string" && data.createdAt.toDate
+          ? data.createdAt.toDate()
+          : data.createdAt
+            ? new Date(data.createdAt)
+            : null;
+        return {
+          id: entry.id,
+          userId: data.userId,
+          userName: data.userName,
+          rating: data.rating,
+          text: data.text,
+          createdAt
+        };
+      });
+      const sortedItems = items.sort((a, b) => {
+        if (!a.createdAt && !b.createdAt) return 0;
+        if (!a.createdAt) return 1;
+        if (!b.createdAt) return -1;
+        return b.createdAt.getTime() - a.createdAt.getTime();
+      });
+      setComments(sortedItems);
+    } catch (error) {
+      console.error("Errore nel caricamento dei commenti:", error);
+      setCommentError("Impossibile caricare i commenti");
+    } finally {
+      setIsCommentsLoading(false);
+    }
+  }, [id, mediaType]);
+
+  useEffect(() => {
+    void loadComments();
+  }, [loadComments]);
+
+  const loadRatings = useCallback(async () => {
+    if (!id || !mediaType) return;
+    if (!isFirebaseEnabled) {
+      setRatings([]);
+      setIsRatingsLoading(false);
+      return;
+    }
+    setIsRatingsLoading(true);
+    setRatingError(null);
+    try {
+      const db = await getDb();
+      const firestore = await getFirestoreModule();
+      if (!db) {
+        setRatingError("Firebase non configurato");
+        setRatings([]);
+        return;
+      }
+      const { collection, getDocs, query, where, orderBy, limit } = firestore;
+      let snapshot;
+      try {
+        const ratingsQuery = query(
+          collection(db, "media_ratings"),
+          where("mediaId", "==", Number(id)),
+          where("mediaType", "==", mediaType),
+          orderBy("updatedAt", "desc"),
+          limit(200)
+        );
+        snapshot = await getDocs(ratingsQuery);
+      } catch (error) {
+        const fallbackQuery = query(
+          collection(db, "media_ratings"),
+          where("mediaId", "==", Number(id)),
+          where("mediaType", "==", mediaType),
+          limit(200)
+        );
+        snapshot = await getDocs(fallbackQuery);
+      }
+      const items = snapshot.docs.map((entry) => {
+        const data = entry.data() as Omit<MediaRating, "id" | "updatedAt"> & { updatedAt?: { toDate?: () => Date } | string };
+        const updatedAt = data.updatedAt && typeof data.updatedAt !== "string" && data.updatedAt.toDate
+          ? data.updatedAt.toDate()
+          : data.updatedAt
+            ? new Date(data.updatedAt)
+            : null;
+        return {
+          id: entry.id,
+          userId: data.userId,
+          userName: data.userName,
+          rating: data.rating,
+          updatedAt
+        };
+      });
+      setRatings(items);
+      if (user) {
+        const existing = items.find((item) => item.userId === user.uid);
+        if (existing) {
+          setRatingValue(existing.rating);
+        }
+      }
+    } catch (error) {
+      console.error("Errore nel caricamento dei voti:", error);
+      setRatingError("Impossibile caricare i voti");
+    } finally {
+      setIsRatingsLoading(false);
+    }
+  }, [id, mediaType, user]);
+
+  useEffect(() => {
+    void loadRatings();
+  }, [loadRatings]);
+
+  const ratingSummary = useMemo(() => {
+    const ratingsList = ratings.map((item) => item.rating).filter((value) => Number.isFinite(value) && value > 0);
+    if (!ratingsList.length) {
+      return { average: "—", count: 0 };
+    }
+    const total = ratingsList.reduce((sum, value) => sum + value, 0);
+    return { average: (total / ratingsList.length).toFixed(1), count: ratingsList.length };
+  }, [ratings]);
+
+  const formatCommentDate = (value?: Date | null) => {
+    if (!value) return "";
+    return value.toLocaleDateString("it-IT", {
+      year: "numeric",
+      month: "long",
+      day: "numeric"
+    });
+  };
+
+  const handleSubmitRating = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!id || !mediaType) return;
+    if (!canAccess || !user) {
+      toast({
+        title: "Accedi per votare",
+        description: "Effettua l'accesso per lasciare un voto",
+        variant: "destructive"
+      });
+      return;
+    }
+    if (ratingValue < 1) {
+      setRatingError("Seleziona un voto");
+      return;
+    }
+    if (!isFirebaseEnabled) {
+      setRatingError("Firebase non configurato");
+      return;
+    }
+    setIsSubmittingRating(true);
+    setRatingError(null);
+    try {
+      const db = await getDb();
+      const firestore = await getFirestoreModule();
+      if (!db) {
+        setRatingError("Firebase non configurato");
+        return;
+      }
+      const { doc, setDoc, serverTimestamp } = firestore;
+      const ratingId = `${mediaType}-${id}-${user.uid}`;
+      await setDoc(doc(db, "media_ratings", ratingId), {
+        mediaId: Number(id),
+        mediaType,
+        userId: user.uid,
+        userName: user.displayName || user.email || "Utente",
+        rating: ratingValue,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      await loadRatings();
+      toast({
+        title: "Voto salvato",
+        description: "Il tuo voto è stato aggiornato"
+      });
+    } catch (error) {
+      console.error("Errore nel salvataggio del voto:", error);
+      setRatingError("Errore nel salvataggio del voto");
+    } finally {
+      setIsSubmittingRating(false);
+    }
+  };
+
+  const handleSubmitComment = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!id || !mediaType) return;
+    if (!canAccess || !user) {
+      toast({
+        title: "Accedi per commentare",
+        description: "Effettua l'accesso per lasciare un commento",
+        variant: "destructive"
+      });
+      return;
+    }
+    if (!commentText.trim()) {
+      setCommentError("Inserisci un commento");
+      return;
+    }
+    if (!isFirebaseEnabled) {
+      setCommentError("Firebase non configurato");
+      return;
+    }
+    setIsSubmittingComment(true);
+    setCommentError(null);
+    try {
+      const db = await getDb();
+      const firestore = await getFirestoreModule();
+      if (!db) {
+        setCommentError("Firebase non configurato");
+        return;
+      }
+      const { addDoc, collection, serverTimestamp } = firestore;
+      await addDoc(collection(db, "media_comments"), {
+        mediaId: Number(id),
+        mediaType,
+        userId: user.uid,
+        userName: user.displayName || user.email || "Utente",
+        text: commentText.trim(),
+        createdAt: serverTimestamp()
+      });
+      setCommentText("");
+      await loadComments();
+      toast({
+        title: "Commento pubblicato",
+        description: "Il tuo commento è stato aggiunto"
+      });
+    } catch (error) {
+      console.error("Errore nel salvataggio del commento:", error);
+      setCommentError("Errore nel salvataggio del commento");
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!isFirebaseEnabled) return;
+    if (!canAccess || !user) return;
+    const isSuperAdmin = user.email?.toLowerCase() === "calisma82@gmail.com";
+    if (!isSuperAdmin) return;
+    setIsDeletingCommentId(commentId);
+    try {
+      const db = await getDb();
+      const firestore = await getFirestoreModule();
+      if (!db) {
+        setCommentError("Firebase non configurato");
+        return;
+      }
+      const { deleteDoc, doc } = firestore;
+      await deleteDoc(doc(db, "media_comments", commentId));
+      setComments((prev) => prev.filter((comment) => comment.id !== commentId));
+      toast({
+        title: "Commento rimosso",
+        description: "Il commento è stato eliminato"
+      });
+    } catch (error) {
+      console.error("Errore nella rimozione del commento:", error);
+      setCommentError("Errore nella rimozione del commento");
+    } finally {
+      setIsDeletingCommentId(null);
+    }
+  };
 
   const setupTrivia = (details: MediaDetailsType, type: "movie" | "tv") => {
     try {
@@ -212,6 +533,9 @@ const MediaDetailsPage = () => {
   const handleShowReviews = () => setShowReviews(true);
   const handleShowSeasons = () => setShowSeasons(true);
   const handleShowGallery = () => setShowGallery(true);
+  const handleShowComments = () => {
+    commentsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const buildLibraryItem = (): LibraryItem | null => {
     if (!media || !mediaType || !id) return null;
@@ -521,12 +845,15 @@ const MediaDetailsPage = () => {
               releaseYear={releaseYear}
               releaseDate={releaseDate}
               runtimeString={getRuntimeString()}
+              nextTrailerAverage={ratingSummary.average}
+              nextTrailerCount={ratingSummary.count}
             />
 
             <MediaActions
               onWatchNow={handleWatchNow}
               onPlayTrailer={handlePlayTrailer}
               onShowReviews={handleShowReviews}
+              onShowComments={handleShowComments}
               onShowSeasons={handleShowSeasons}
               onAddToWatchlist={handleAddToWatchlist}
               onToggleLibrary={handleToggleLibrary}
@@ -601,6 +928,108 @@ const MediaDetailsPage = () => {
                 {mainCast.map(actor => (
                   <div key={actor.id} onClick={() => handleViewActorDetails(actor.id)} className="cursor-pointer transition-transform hover:scale-105">
                     <ActorCard actor={actor} />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div ref={commentsRef} className="mb-8">
+              <h2 className="text-xl font-semibold mb-4">Commenti e Voti</h2>
+              <div className="flex flex-wrap items-center gap-4 mb-6">
+                <div className="text-3xl font-semibold">{ratingSummary.average}</div>
+                <div className="text-sm text-muted-foreground">
+                  Media voto utenti NextTrailer{ratingSummary.count ? ` • ${ratingSummary.count} voti` : ""}
+                </div>
+                {isRatingsLoading && (
+                  <div className="text-sm text-muted-foreground">Caricamento voti...</div>
+                )}
+              </div>
+
+              {!isFirebaseEnabled && (
+                <div className="text-sm text-muted-foreground">Firebase non configurato.</div>
+              )}
+
+              {isFirebaseEnabled && !canAccess && (
+                <div className="text-sm text-muted-foreground">
+                  Accedi per commentare e votare questo contenuto.
+                </div>
+              )}
+
+              {isFirebaseEnabled && canAccess && (
+                <div className="grid gap-6 mb-6">
+                  <form onSubmit={handleSubmitRating} className="bg-secondary/10 rounded-lg p-4 border border-white/5">
+                    <div className="flex flex-col sm:flex-row gap-4 items-end">
+                      <div className="sm:w-48">
+                        <label className="text-sm text-muted-foreground block mb-2">Il tuo voto</label>
+                        <select
+                          value={ratingValue || ""}
+                          onChange={(event) => setRatingValue(Number(event.target.value))}
+                          className="w-full bg-background border border-white/10 rounded-md px-3 py-2 text-sm"
+                        >
+                          <option value="">Seleziona</option>
+                          {Array.from({ length: 10 }, (_, index) => 10 - index).map((value) => (
+                            <option key={value} value={value}>{value}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex-1 text-sm text-muted-foreground">
+                        {ratingValue > 0 ? `Il tuo voto attuale è ${ratingValue}` : "Non hai ancora votato."}
+                      </div>
+                      <Button type="submit" disabled={isSubmittingRating}>
+                        {isSubmittingRating ? "Salvataggio..." : "Salva voto"}
+                      </Button>
+                    </div>
+                    {ratingError && <div className="text-sm text-destructive mt-3">{ratingError}</div>}
+                  </form>
+
+                  <form onSubmit={handleSubmitComment} className="bg-secondary/10 rounded-lg p-4 border border-white/5">
+                    <label className="text-sm text-muted-foreground block mb-2">Il tuo commento</label>
+                    <textarea
+                      value={commentText}
+                      onChange={(event) => setCommentText(event.target.value)}
+                      rows={3}
+                      className="w-full bg-background border border-white/10 rounded-md px-3 py-2 text-sm resize-none"
+                      placeholder="Scrivi un commento..."
+                    />
+                    {commentError && <div className="text-sm text-destructive mt-3">{commentError}</div>}
+                    <div className="mt-4 flex justify-end">
+                      <Button type="submit" disabled={isSubmittingComment}>
+                        {isSubmittingComment ? "Invio in corso..." : "Pubblica"}
+                      </Button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {commentError && (
+                <div className="text-sm text-destructive mb-3">{commentError}</div>
+              )}
+              <div className="space-y-4 max-h-80 overflow-y-auto rounded-lg border border-white/5 bg-secondary/5 p-4">
+                {isCommentsLoading && (
+                  <div className="text-sm text-muted-foreground">Caricamento commenti...</div>
+                )}
+                {!isCommentsLoading && comments.length === 0 && (
+                  <div className="text-sm text-muted-foreground">Nessun commento disponibile.</div>
+                )}
+                {!isCommentsLoading && comments.map((comment) => (
+                  <div key={comment.id} className="border border-white/5 rounded-lg p-4 bg-background/60">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-semibold">{comment.userName}</div>
+                      <div className="text-sm text-muted-foreground flex items-center gap-3">
+                        {comment.createdAt && <span>{formatCommentDate(comment.createdAt)}</span>}
+                        {isSuperAdmin && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteComment(comment.id)}
+                            disabled={isDeletingCommentId === comment.id}
+                          >
+                            {isDeletingCommentId === comment.id ? "Rimozione..." : "Rimuovi"}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-2">{comment.text}</p>
                   </div>
                 ))}
               </div>

@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Star, Clock, Calendar, Globe } from "lucide-react";
+import { Star, Clock, Calendar, Globe, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { MediaDetails } from "@/services/tmdbApi";
 
@@ -10,6 +10,8 @@ interface MediaInfoProps {
     releaseYear: string;
     releaseDate: string | undefined;
     runtimeString: string;
+    nextTrailerAverage: string;
+    nextTrailerCount: number;
 }
 
 export const MediaInfo = ({
@@ -17,7 +19,9 @@ export const MediaInfo = ({
     title,
     releaseYear,
     releaseDate,
-    runtimeString
+    runtimeString,
+    nextTrailerAverage,
+    nextTrailerCount
 }: MediaInfoProps) => {
     return (
         <div className="mb-6">
@@ -39,6 +43,16 @@ export const MediaInfo = ({
                         <Star className="h-5 w-5 text-yellow-500 fill-yellow-500 mr-1" />
                         <span className="font-medium text-white">{(media.vote_average / 2).toFixed(1)}</span>
                         <span className="text-xs ml-1">/5</span>
+                    </div>
+                )}
+                {nextTrailerAverage !== "—" && (
+                    <div className="flex items-center">
+                        <Sparkles className="h-5 w-5 text-accent mr-1" />
+                        <span className="font-medium text-white">{nextTrailerAverage}</span>
+                        <span className="text-xs ml-1">/10</span>
+                        {nextTrailerCount > 0 && (
+                            <span className="text-xs ml-2 text-muted-foreground">NextTrailer</span>
+                        )}
                     </div>
                 )}
 
