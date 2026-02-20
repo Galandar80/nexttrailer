@@ -105,9 +105,23 @@ const fetchText = async (url: string) => {
   return response.text();
 };
 
+const fetchFeedViaServer = async (url: string) => {
+  const response = await fetch(`/api/rss?url=${encodeURIComponent(url)}`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`.trim());
+  }
+  return response.text();
+};
+
 const fetchFeedXml = async (url: string) => {
   const candidates = buildFeedCandidates(url);
   const errors: string[] = [];
+  try {
+    return await fetchFeedViaServer(url);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Errore";
+    errors.push(`server → ${message}`);
+  }
   for (const candidate of candidates) {
     try {
       return await fetchText(candidate);

@@ -1,5 +1,5 @@
 
-import { Search, User as UserIcon, LogOut, Menu } from "lucide-react";
+import { Search, User as UserIcon, LogOut, Menu, Bell } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { useLibraryStore } from "@/store/useLibraryStore";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useAuth } from "@/context/auth-core";
 import { tmdbApi, MediaItem } from "@/services/tmdbApi";
+import { getDb, getFirestoreModule, isFirebaseEnabled } from "@/services/firebase";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,8 +45,10 @@ const Navbar = () => {
   const [registerEmail, setRegisterEmail] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
-  const [isNewsMenuOpen, setIsNewsMenuOpen] = useState(false);
+  const [isCatalogMenuOpen, setIsCatalogMenuOpen] = useState(false);
+  const [isLibraryMenuOpen, setIsLibraryMenuOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const watchlistCount = items.length;
   const libraryCount = libraryItems.length;
 
@@ -226,6 +229,31 @@ const Navbar = () => {
     setIsMobileMenuOpen(false);
   }, [location.pathname]);
 
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    const setupNotifications = async () => {
+      if (!canAccess || !user || !isFirebaseEnabled) {
+        setUnreadNotifications(0);
+        return;
+      }
+      const [db, firestore] = await Promise.all([getDb(), getFirestoreModule()]);
+      if (!db) return;
+      const { collection, query, where, onSnapshot } = firestore;
+      const notificationsQuery = query(
+        collection(db, "user_notifications"),
+        where("recipientId", "==", user.uid),
+        where("readAt", "==", null)
+      );
+      unsubscribe = onSnapshot(notificationsQuery, (snapshot) => {
+        setUnreadNotifications(snapshot.size);
+      });
+    };
+    void setupNotifications();
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [canAccess, user]);
+
   return (
     <nav className="py-4 px-4 md:px-8 border-b border-muted/30 z-50 relative bg-background/80 backdrop-blur-md sticky top-0">
       <div className="max-w-screen-2xl mx-auto flex items-center justify-between">
@@ -241,44 +269,48 @@ const Navbar = () => {
             >
               Home
             </Link>
-            <div onMouseEnter={() => setIsNewsMenuOpen(true)} onMouseLeave={() => setIsNewsMenuOpen(false)}>
-              <DropdownMenu open={isNewsMenuOpen} onOpenChange={setIsNewsMenuOpen}>
+            <Link
+              to="/news"
+              className={`transition-colors ${isNewsActive ? 'text-accent font-medium' : 'hover:text-accent font-medium'}`}
+            >
+              News
+            </Link>
+            {canAccess && (
+              <Link
+                to="/community"
+                className={`transition-colors ${isActive('/community') ? 'text-accent font-medium' : 'hover:text-accent font-medium'}`}
+              >
+                Community
+              </Link>
+            )}
+            <div onMouseEnter={() => setIsCatalogMenuOpen(true)} onMouseLeave={() => setIsCatalogMenuOpen(false)}>
+              <DropdownMenu
+                open={isCatalogMenuOpen}
+                onOpenChange={(open) => {
+                  if (!open) setIsCatalogMenuOpen(false);
+                }}
+              >
                 <DropdownMenuTrigger asChild>
                   <Link
-                    to="/news"
-                    className={`transition-colors ${isNewsActive ? 'text-accent font-medium' : 'hover:text-accent font-medium'}`}
+                    to="/catalogo"
+                    className={`transition-colors ${isActive('/catalogo') ? 'text-accent font-medium' : 'hover:text-accent font-medium'}`}
                   >
-                    News
+                    Catalogo
                   </Link>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
                   <DropdownMenuItem asChild>
-                    <Link to="/news">News</Link>
+                    <Link to="/catalogo">Catalogo</Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link to="/news/archivio">Archivio news</Link>
+                    <Link to="/oscar">Oscar</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/genres">Sfoglia</Link>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-            <Link
-              to="/catalogo"
-              className={`transition-colors ${isActive('/catalogo') ? 'text-accent font-medium' : 'hover:text-accent font-medium'}`}
-            >
-              Catalogo
-            </Link>
-            <Link
-              to="/oscar"
-              className={`transition-colors ${isActive('/oscar') ? 'text-accent font-medium' : 'hover:text-accent font-medium'}`}
-            >
-              Oscar
-            </Link>
-            <Link
-              to="/genres"
-              className={`transition-colors ${isActive('/genres') ? 'text-accent font-medium' : 'hover:text-accent font-medium'}`}
-            >
-              Sfoglia
-            </Link>
           </div>
         </div>
 
@@ -352,6 +384,18 @@ const Navbar = () => {
           <Button variant="ghost" className="md:hidden" size="icon" onClick={() => navigate('/search')}>
             <Search className="h-4 w-4" />
           </Button>
+          {canAccess && (
+            <Link to="/notifiche" className="hidden md:inline-flex">
+              <Button variant="ghost" className="relative" size="icon">
+                <Bell className="h-4 w-4" />
+                {unreadNotifications > 0 && (
+                  <span className="bg-accent text-white text-[10px] rounded-full h-4 min-w-4 px-1 flex items-center justify-center absolute -top-1 -right-1">
+                    {unreadNotifications}
+                  </span>
+                )}
+              </Button>
+            </Link>
+          )}
           <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" className="md:hidden" size="icon">
@@ -369,16 +413,18 @@ const Navbar = () => {
                 <Button variant="ghost" className="justify-start" asChild>
                   <Link to="/news" onClick={() => setIsMobileMenuOpen(false)}>News</Link>
                 </Button>
-                <Button variant="ghost" className="justify-start" asChild>
-                  <Link to="/news/archivio" onClick={() => setIsMobileMenuOpen(false)}>Archivio news</Link>
-                </Button>
+                {canAccess && (
+                  <Button variant="ghost" className="justify-start" asChild>
+                    <Link to="/community" onClick={() => setIsMobileMenuOpen(false)}>Community</Link>
+                  </Button>
+                )}
                 <Button variant="ghost" className="justify-start" asChild>
                   <Link to="/catalogo" onClick={() => setIsMobileMenuOpen(false)}>Catalogo</Link>
                 </Button>
-                <Button variant="ghost" className="justify-start" asChild>
+                <Button variant="ghost" className="justify-start pl-8" asChild>
                   <Link to="/oscar" onClick={() => setIsMobileMenuOpen(false)}>Oscar</Link>
                 </Button>
-                <Button variant="ghost" className="justify-start" asChild>
+                <Button variant="ghost" className="justify-start pl-8" asChild>
                   <Link to="/genres" onClick={() => setIsMobileMenuOpen(false)}>Sfoglia</Link>
                 </Button>
                 <Button variant="ghost" className="justify-start" asChild>
@@ -387,11 +433,11 @@ const Navbar = () => {
                 {canAccess && (
                   <>
                     <Button variant="ghost" className="justify-between" asChild>
-                      <Link to="/watchlist" onClick={() => setIsMobileMenuOpen(false)}>
-                        <span>Watchlist</span>
-                        {watchlistCount > 0 && (
+                      <Link to="/notifiche" onClick={() => setIsMobileMenuOpen(false)}>
+                        <span>Notifiche</span>
+                        {unreadNotifications > 0 && (
                           <span className="bg-accent text-white text-[10px] rounded-full h-4 min-w-4 px-1 flex items-center justify-center">
-                            {watchlistCount}
+                            {unreadNotifications}
                           </span>
                         )}
                       </Link>
@@ -405,6 +451,19 @@ const Navbar = () => {
                           </span>
                         )}
                       </Link>
+                    </Button>
+                    <Button variant="ghost" className="justify-between pl-8" asChild>
+                      <Link to="/watchlist" onClick={() => setIsMobileMenuOpen(false)}>
+                        <span>Watchlist</span>
+                        {watchlistCount > 0 && (
+                          <span className="bg-accent text-white text-[10px] rounded-full h-4 min-w-4 px-1 flex items-center justify-center">
+                            {watchlistCount}
+                          </span>
+                        )}
+                      </Link>
+                    </Button>
+                    <Button variant="ghost" className="justify-start" asChild>
+                      <Link to="/profilo" onClick={() => setIsMobileMenuOpen(false)}>Profilo</Link>
                     </Button>
                     <Button variant="ghost" className="justify-start" asChild>
                       <Link to="/preferenze" onClick={() => setIsMobileMenuOpen(false)}>Preferenze</Link>
@@ -440,25 +499,38 @@ const Navbar = () => {
 
           {canAccess && (
             <>
-              <Link to="/watchlist">
+              <div onMouseEnter={() => setIsLibraryMenuOpen(true)} onMouseLeave={() => setIsLibraryMenuOpen(false)}>
+                <DropdownMenu
+                  open={isLibraryMenuOpen}
+                  onOpenChange={(open) => {
+                    if (!open) setIsLibraryMenuOpen(false);
+                  }}
+                >
+                  <DropdownMenuTrigger asChild>
+                    <Button asChild variant="ghost" className="text-accent hover:text-accent hover:bg-accent/10 relative px-2 sm:px-4">
+                      <Link to="/storico">
+                        <span className="hidden sm:inline">Storico</span>
+                        {libraryCount > 0 && (
+                          <span className="bg-accent text-white text-[10px] rounded-full h-4 w-4 flex items-center justify-center sm:ml-2 sm:static absolute -top-1 -right-1">
+                            {libraryCount}
+                          </span>
+                        )}
+                      </Link>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem asChild>
+                      <Link to="/storico">Storico</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/watchlist">Watchlist</Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+              <Link to="/profilo">
                 <Button variant="ghost" className="text-accent hover:text-accent hover:bg-accent/10 relative px-2 sm:px-4">
-                  <span className="hidden sm:inline">Watchlist</span>
-                  {watchlistCount > 0 && (
-                    <span className="bg-accent text-white text-[10px] rounded-full h-4 w-4 flex items-center justify-center sm:ml-2 sm:static absolute -top-1 -right-1">
-                      {watchlistCount}
-                    </span>
-                  )}
-                </Button>
-              </Link>
-
-              <Link to="/storico">
-                <Button variant="ghost" className="text-accent hover:text-accent hover:bg-accent/10 relative px-2 sm:px-4">
-                  <span className="hidden sm:inline">Storico</span>
-                  {libraryCount > 0 && (
-                    <span className="bg-accent text-white text-[10px] rounded-full h-4 w-4 flex items-center justify-center sm:ml-2 sm:static absolute -top-1 -right-1">
-                      {libraryCount}
-                    </span>
-                  )}
+                  <span className="hidden sm:inline">Profilo</span>
                 </Button>
               </Link>
             </>
@@ -486,6 +558,15 @@ const Navbar = () => {
                 {canAccess ? (
                   <>
                     <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => navigate('/profilo')}>
+                      Profilo
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate('/community')}>
+                      Community
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate('/notifiche')}>
+                      Notifiche
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => navigate('/watchlist')}>
                       Watchlist
                     </DropdownMenuItem>

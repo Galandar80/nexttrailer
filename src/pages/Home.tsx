@@ -112,11 +112,11 @@ const Home = () => {
                 <div className="space-y-6">
                   <Badge variant="secondary" className="w-fit">LA HOME DELLA TUA VISIONE</Badge>
                   <h1 className="text-4xl md:text-6xl font-bold">
-                    Un unico posto per scoprire, seguire e ricordare tutto ciò che guardi.
+                    Tutto ciò che ti serve per guardare, salvare e condividere la tua visione.
                   </h1>
                   <p className="text-base md:text-lg text-muted-foreground max-w-2xl">
-                    NextTrailer è la tua regia personale: notizie, trailer, calendario episodi,
-                    storico e consigli su misura. Semplice, veloce, pensato per chi ama film e serie.
+                    NextTrailer unisce news aggiornate, trailer, catalogo, community e notifiche.
+                    Organizza watchlist, storico e liste personali mentre segui amici e profili.
                   </p>
                   <div className="flex flex-wrap gap-3">
                     <Button onClick={() => navigate("/storico")} className="bg-accent hover:bg-accent/90">
@@ -128,9 +128,9 @@ const Home = () => {
                   </div>
                   <div className="grid gap-3 md:grid-cols-3">
                     {[
-                      "Calendario episodi personalizzato",
-                      "Watchlist e storico sincronizzati",
-                      "Suggerimenti e news sempre aggiornati"
+                      "Notifiche quando qualcuno ti segue",
+                      "Liste personali modificabili dal profilo",
+                      "Watchlist, storico e news sempre aggiornati"
                     ].map((feature) => (
                       <div key={feature} className="flex items-start gap-2 text-sm text-muted-foreground">
                         <CheckCircle2 className="h-4 w-4 text-accent mt-0.5" />
@@ -177,11 +177,10 @@ const Home = () => {
           <section className="max-w-screen-2xl mx-auto px-4 md:px-8 grid gap-8 lg:grid-cols-[1fr_1fr] items-start">
             <div className="space-y-4">
               <Badge variant="outline" className="w-fit">COS’È NEXTTRAILER</Badge>
-              <h2 className="text-3xl md:text-4xl font-bold">La tua cabina di regia per cinema e serie TV.</h2>
+              <h2 className="text-3xl md:text-4xl font-bold">La tua cabina di regia per cinema, serie e community.</h2>
               <p className="text-muted-foreground">
-                Raccogli tutto in un unico spazio: trailer, news, consigli e un calendario
-                chiaro per non perdere le uscite. Ideale se guardi contenuti su più piattaforme
-                e vuoi avere sempre il controllo.
+                Raccogli tutto in un unico spazio: trailer, news, catalogo, profili e notifiche.
+                Segui altri utenti, crea liste personali e tieni traccia di ciò che guardi.
               </p>
               <div className="flex flex-wrap gap-3">
                 <Button variant="default" onClick={() => navigate("/search")}>
@@ -212,10 +211,10 @@ const Home = () => {
                     <div className="h-10 w-10 rounded-full bg-accent/20 flex items-center justify-center">
                       <Sparkles className="h-5 w-5 text-accent" />
                     </div>
-                    <h3 className="text-lg font-semibold">Scoperte continue</h3>
+                    <h3 className="text-lg font-semibold">News sempre attive</h3>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Trailer e suggerimenti mirati per trovare subito cosa guardare stasera.
+                    Leggi notizie aggiornate e approfondimenti per restare sul pezzo.
                   </p>
                 </CardContent>
               </Card>
@@ -225,10 +224,10 @@ const Home = () => {
                     <div className="h-10 w-10 rounded-full bg-accent/20 flex items-center justify-center">
                       <Rocket className="h-5 w-5 text-accent" />
                     </div>
-                    <h3 className="text-lg font-semibold">Tutto in un solo posto</h3>
+                    <h3 className="text-lg font-semibold">Community e profili</h3>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Niente fogli di appunti o note sparse: organizza la visione in un click.
+                    Segui altri utenti, scopri nuove liste e tieni vive le tue preferenze.
                   </p>
                 </CardContent>
               </Card>
@@ -238,10 +237,10 @@ const Home = () => {
                     <div className="h-10 w-10 rounded-full bg-accent/20 flex items-center justify-center">
                       <ShieldCheck className="h-5 w-5 text-accent" />
                     </div>
-                    <h3 className="text-lg font-semibold">Privacy al centro</h3>
+                    <h3 className="text-lg font-semibold">Liste sotto controllo</h3>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    I tuoi dati servono solo per sincronizzare le tue liste e migliorare la tua esperienza.
+                    Crea, modifica e gestisci liste personali in modo semplice e sicuro.
                   </p>
                 </CardContent>
               </Card>
@@ -253,16 +252,16 @@ const Home = () => {
               <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] items-center">
                 <div className="space-y-4">
                   <Badge variant="outline" className="w-fit">PERCHÉ REGISTRARSI</Badge>
-                  <h2 className="text-3xl md:text-4xl font-bold">Sblocca la parte più utile di NextTrailer.</h2>
+                  <h2 className="text-3xl md:text-4xl font-bold">Sblocca community, notifiche e liste personali.</h2>
                   <p className="text-muted-foreground">
-                    La registrazione ti permette di salvare ciò che guardi, sincronizzare lo storico
-                    su tutti i dispositivi e ricevere suggerimenti davvero personalizzati.
+                    La registrazione ti permette di seguire altri utenti, ricevere notifiche
+                    e tenere sincronizzate watchlist, storico e liste personali.
                   </p>
                   <div className="grid gap-3">
                     {[
-                      "Sincronizzazione automatica di watchlist e storico",
-                      "Calendario episodi costruito sulle tue serie",
-                      "Suggerimenti basati sui tuoi gusti reali"
+                      "Notifiche per nuovi follower e attività",
+                      "Liste personali editabili dal profilo",
+                      "Storico e watchlist sempre sincronizzati"
                     ].map((point) => (
                       <div key={point} className="flex items-start gap-2 text-sm text-muted-foreground">
                         <CheckCircle2 className="h-4 w-4 text-accent mt-0.5" />
@@ -285,8 +284,8 @@ const Home = () => {
                   <div className="grid gap-4">
                     {[
                       "Crea l’account in pochi secondi.",
-                      "Aggiungi film e serie che stai guardando.",
-                      "Consulta calendario e storico ovunque."
+                      "Segui profili e crea le tue liste personali.",
+                      "Consulta news, notifiche e storico ovunque."
                     ].map((step, index) => (
                       <div key={step} className="flex items-start gap-3 rounded-xl border border-muted/30 bg-background/70 p-4">
                         <div className="h-8 w-8 rounded-full bg-accent/20 text-accent flex items-center justify-center font-semibold">

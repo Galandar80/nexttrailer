@@ -1,35 +1,41 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { BrowserRouter } from 'react-router-dom';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { HelmetProvider } from "react-helmet-async";
 
+vi.mock("@/store/useWatchlistStore", () => ({
+    useWatchlistStore: () => ({ items: [] })
+}));
+
+vi.mock("@/store/useLibraryStore", () => ({
+    useLibraryStore: () => ({ items: [] })
+}));
+
+vi.mock("@/context/auth-core", () => ({
+    useAuth: () => ({
+        user: {
+            uid: "test-user",
+            displayName: "Test User",
+            email: "test@example.com",
+            photoURL: ""
+        },
+        loading: false,
+        canAccess: true,
+        signInWithGoogle: vi.fn(),
+        signInWithEmail: vi.fn(),
+        signUpWithEmail: vi.fn(),
+        sendVerificationEmail: vi.fn(),
+        resendVerificationWithEmail: vi.fn(),
+        resetPassword: vi.fn(),
+        logout: vi.fn()
+    })
+}));
+
 describe('Navbar', () => {
-    it('renders NextTrailer logo', () => {
-        render(
-            <BrowserRouter>
-                <Navbar />
-            </BrowserRouter>
-        );
-
-        expect(screen.getByText('Next')).toBeInTheDocument();
-        expect(screen.getByText('Trailer')).toBeInTheDocument();
-    });
-
-    it('renders navigation links', () => {
-        render(
-            <BrowserRouter>
-                <Navbar />
-            </BrowserRouter>
-        );
-
-        expect(screen.getByText('Home')).toBeInTheDocument();
-        expect(screen.getByText('Film')).toBeInTheDocument();
-        expect(screen.getByText('Serie TV')).toBeInTheDocument();
-    });
-
+    const queryClient = new QueryClient();
     const wrapper = ({ children }: { children: React.ReactNode }) => (
         <HelmetProvider>
             <QueryClientProvider client={queryClient}>
@@ -40,12 +46,36 @@ describe('Navbar', () => {
         </HelmetProvider>
     );
 
+    it('renders NextTrailer logo', () => {
+        render(
+            <Navbar />,
+            { wrapper }
+        );
+
+        expect(screen.getByText('Next')).toBeInTheDocument();
+        expect(screen.getByText('Trailer')).toBeInTheDocument();
+    });
+
+    it('renders navigation links', () => {
+        render(
+            <Navbar />,
+            { wrapper }
+        );
+
+        expect(screen.getByText('Home')).toBeInTheDocument();
+        expect(screen.getByText('News')).toBeInTheDocument();
+        expect(screen.getByText('Catalogo')).toBeInTheDocument();
+        expect(screen.getByText('Community')).toBeInTheDocument();
+    });
+
     it('renders watchlist button', () => {
         render(
-            <BrowserRouter>
-                <Navbar />
-            </BrowserRouter>
+            <Navbar />,
+            { wrapper }
         );
+
+        const libraryLink = screen.getByRole('link', { name: 'Storico' });
+        fireEvent.mouseEnter(libraryLink);
 
         expect(screen.getByText('Watchlist')).toBeInTheDocument();
     });

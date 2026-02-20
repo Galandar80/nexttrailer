@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { SEO } from "@/components/SEO";
 import { Badge } from "@/components/ui/badge";
 import { useSearchParams } from "react-router-dom";
+import { useDebounce } from "@/hooks/useDebounce";
 import {
   Select,
   SelectContent,
@@ -20,22 +21,29 @@ import {
 } from "@/components/ui/select";
 
 const Search = () => {
-  const [searchParams] = useSearchParams();
-  const [query, setQuery] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [query, setQuery] = useState(() => searchParams.get("q") || "");
   const [results, setResults] = useState<MediaItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
-  const [syncedQuery, setSyncedQuery] = useState<string | null>(null);
 
   // Filters
-  const [mediaType, setMediaType] = useState<"all" | "movie" | "tv" | "person">("all");
-  const [selectedGenre, setSelectedGenre] = useState<string>("all");
-  const [selectedYear, setSelectedYear] = useState<string>("all");
+  const [mediaType, setMediaType] = useState<"all" | "movie" | "tv" | "person">(() => {
+    const value = searchParams.get("type");
+    if (value === "movie" || value === "tv" || value === "person" || value === "all") {
+      return value;
+    }
+    return "all";
+  });
+  const [selectedGenre, setSelectedGenre] = useState<string>(() => searchParams.get("genre") || "all");
+  const [selectedYear, setSelectedYear] = useState<string>(() => searchParams.get("year") || "all");
   const [availableGenres, setAvailableGenres] = useState<Genre[]>([]);
 
   // Years for filter
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 50 }, (_, i) => (currentYear - i).toString());
+  const debouncedQuery = useDebounce(query, 400);
+  const debouncedFiltersKey = useDebounce(`${mediaType}|${selectedGenre}|${selectedYear}`, 400);
 
   useEffect(() => {
     if (mediaType === "person" || mediaType === "all") {
@@ -56,12 +64,16 @@ const Search = () => {
   const handleSearch = React.useCallback(async (e?: React.FormEvent, overrideQuery?: string) => {
     if (e) e.preventDefault();
     const activeQuery = typeof overrideQuery === "string" ? overrideQuery : query;
+    const hasActiveFilters = mediaType !== "all" || selectedGenre !== "all" || selectedYear !== "all";
 
     // Logic: 
     // 1. If query is present, use search API (primary)
     // 2. If query is empty but filters are set, use discover API
 
-    if (!activeQuery.trim() && !showFilters) return;
+    if (!activeQuery.trim() && !hasActiveFilters) {
+      setResults([]);
+      return;
+    }
 
     setIsSearching(true);
     setResults([]);
@@ -111,21 +123,25 @@ const Search = () => {
     } finally {
       setIsSearching(false);
     }
-  }, [query, showFilters, mediaType, selectedGenre, selectedYear]);
+  }, [query, mediaType, selectedGenre, selectedYear]);
 
   useEffect(() => {
     const urlQuery = searchParams.get("q") || "";
-    if (urlQuery && urlQuery !== syncedQuery) {
-      setQuery(urlQuery);
-      setSyncedQuery(urlQuery);
-      handleSearch(undefined, urlQuery);
-    }
-  }, [searchParams, handleSearch, query, syncedQuery]);
+    const urlType = searchParams.get("type");
+    const urlGenre = searchParams.get("genre") || "all";
+    const urlYear = searchParams.get("year") || "all";
+    const normalizedType = urlType === "movie" || urlType === "tv" || urlType === "person" || urlType === "all" ? urlType : "all";
+
+    setQuery((prev) => (prev === urlQuery ? prev : urlQuery));
+    setMediaType((prev) => (prev === normalizedType ? prev : normalizedType));
+    setSelectedGenre((prev) => (prev === urlGenre ? prev : urlGenre));
+    setSelectedYear((prev) => (prev === urlYear ? prev : urlYear));
+  }, [searchParams]);
 
   // Trigger search when filters change
   useEffect(() => {
-    handleSearch();
-  }, [mediaType, selectedGenre, selectedYear, handleSearch, query]);
+    handleSearch(undefined, debouncedQuery);
+  }, [debouncedQuery, debouncedFiltersKey, handleSearch]);
 
   useEffect(() => {
     if (mediaType === "person" || mediaType === "all") {
@@ -133,6 +149,28 @@ const Search = () => {
       setSelectedYear("all");
     }
   }, [mediaType]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    const trimmedQuery = debouncedQuery.trim();
+
+    if (trimmedQuery) {
+      params.set("q", trimmedQuery);
+    }
+    if (mediaType !== "all") {
+      params.set("type", mediaType);
+    }
+    if (selectedGenre !== "all") {
+      params.set("genre", selectedGenre);
+    }
+    if (selectedYear !== "all") {
+      params.set("year", selectedYear);
+    }
+
+    if (params.toString() !== searchParams.toString()) {
+      setSearchParams(params, { replace: true });
+    }
+  }, [debouncedQuery, debouncedFiltersKey, mediaType, selectedGenre, selectedYear, searchParams, setSearchParams]);
 
   const clearFilters = () => {
     setMediaType("all");

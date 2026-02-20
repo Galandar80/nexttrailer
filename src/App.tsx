@@ -25,10 +25,14 @@ const Library = lazy(() => import("./pages/Library"));
 const PersonDetails = lazy(() => import("./pages/PersonDetails"));
 const Oscar = lazy(() => import("./pages/Oscar"));
 const Preferences = lazy(() => import("./pages/Preferences"));
-const News = lazy(() => import("./pages/News"));
 const NewsArticle = lazy(() => import("./pages/NewsArticle"));
 const NewsAdmin = lazy(() => import("./pages/NewsAdmin"));
 const NewsArchive = lazy(() => import("./pages/NewsArchive"));
+const Community = lazy(() => import("./pages/Community"));
+const Profile = lazy(() => import("./pages/Profile"));
+const Followers = lazy(() => import("./pages/Followers"));
+const Following = lazy(() => import("./pages/Following"));
+const Notifications = lazy(() => import("./pages/Notifications"));
 
 // Configurazione di React Query per gestire meglio le richieste API
 const queryClient = new QueryClient({
@@ -89,7 +93,15 @@ const App = () => {
                     <Route path="/news/archivio" element={<NewsArchive />} />
                     <Route path="/news/article" element={<NewsArticle />} />
                     <Route path="/news/:id" element={<NewsArticle />} />
-                    <Route path="/news" element={<News />} />
+                    <Route path="/news" element={<NewsArchive />} />
+                    <Route path="/community" element={<Community />} />
+                    <Route path="/notifiche" element={<Notifications />} />
+                    <Route path="/profilo" element={<Profile />} />
+                    <Route path="/profilo/:id" element={<Profile />} />
+                    <Route path="/profilo/:id/follower" element={<Followers />} />
+                    <Route path="/profilo/:id/seguiti" element={<Following />} />
+                    <Route path="/profilo/follower" element={<Followers />} />
+                    <Route path="/profilo/seguiti" element={<Following />} />
                     <Route path="/watchlist" element={<Watchlist />} />
                     <Route path="/storico" element={<Library />} />
                     <Route path="/preferenze" element={<Preferences />} />

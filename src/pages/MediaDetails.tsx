@@ -47,6 +47,24 @@ type MediaRating = {
   updatedAt?: Date | null;
 };
 
+type UserListItem = {
+  mediaId: number;
+  mediaType: "movie" | "tv";
+  title: string;
+  posterPath?: string | null;
+};
+
+type UserList = {
+  id: string;
+  ownerId: string;
+  name: string;
+  description?: string;
+  isPublic: boolean;
+  items: UserListItem[];
+  createdAt?: Date | null;
+  updatedAt?: Date | null;
+};
+
 const MediaDetailsPage = () => {
   const { mediaType, id } = useParams<{ mediaType: "movie" | "tv", id: string }>();
   const navigate = useNavigate();
@@ -77,6 +95,15 @@ const MediaDetailsPage = () => {
   const [commentError, setCommentError] = useState<string | null>(null);
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [isDeletingCommentId, setIsDeletingCommentId] = useState<string | null>(null);
+  const [userLists, setUserLists] = useState<UserList[]>([]);
+  const [isListsLoading, setIsListsLoading] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
+  const [selectedListId, setSelectedListId] = useState("");
+  const [newListName, setNewListName] = useState("");
+  const [newListDescription, setNewListDescription] = useState("");
+  const [isListPublic, setIsListPublic] = useState(true);
+  const [isCreatingList, setIsCreatingList] = useState(false);
+  const [isAddingToList, setIsAddingToList] = useState(false);
   const { toast } = useToast();
   const { addItem, removeItem, isInWatchlist } = useWatchlistStore();
   const { addItem: addLibraryItem, removeItem: removeLibraryItem, getItem, markMovieWatched } = useLibraryStore();
@@ -310,6 +337,235 @@ const MediaDetailsPage = () => {
     return { average: (total / ratingsList.length).toFixed(1), count: ratingsList.length };
   }, [ratings]);
 
+  const mediaTitle = useMemo(() => {
+    if (!media) return "";
+    return mediaType === "movie" ? media.title || "" : media.name || "";
+  }, [media, mediaType]);
+
+  const logActivity = useCallback(async (payload: {
+    type: "rating" | "comment" | "list_add";
+    rating?: number;
+    commentText?: string;
+    listId?: string;
+    listName?: string;
+  }) => {
+    if (!isFirebaseEnabled || !user || !id || !mediaType) return;
+    try {
+      const db = await getDb();
+      const firestore = await getFirestoreModule();
+      if (!db) return;
+      const { addDoc, collection, serverTimestamp } = firestore;
+      await addDoc(collection(db, "user_activity"), {
+        userId: user.uid,
+        userName: user.displayName || user.email || "Utente",
+        userPhoto: user.photoURL || "",
+        type: payload.type,
+        rating: payload.rating ?? null,
+        commentText: payload.commentText ?? "",
+        listId: payload.listId ?? "",
+        listName: payload.listName ?? "",
+        mediaId: Number(id),
+        mediaType,
+        mediaTitle,
+        posterPath: media?.poster_path || null,
+        createdAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Errore nel tracciamento attività:", error);
+    }
+  }, [id, mediaType, media, mediaTitle, user]);
+
+  const loadUserLists = useCallback(async () => {
+    if (!isFirebaseEnabled || !canAccess || !user) {
+      setUserLists([]);
+      setIsListsLoading(false);
+      return;
+    }
+    setIsListsLoading(true);
+    setListError(null);
+    try {
+      const db = await getDb();
+      const firestore = await getFirestoreModule();
+      if (!db) {
+        setListError("Firebase non configurato");
+        setUserLists([]);
+        return;
+      }
+      const { collection, getDocs, query, where, orderBy } = firestore;
+      let snapshot;
+      try {
+        const listsQuery = query(
+          collection(db, "user_lists"),
+          where("ownerId", "==", user.uid),
+          orderBy("updatedAt", "desc")
+        );
+        snapshot = await getDocs(listsQuery);
+      } catch (error) {
+        const listsQuery = query(
+          collection(db, "user_lists"),
+          where("ownerId", "==", user.uid)
+        );
+        snapshot = await getDocs(listsQuery);
+      }
+      const items = snapshot.docs.map((entry) => {
+        const data = entry.data() as Omit<UserList, "id" | "createdAt" | "updatedAt"> & {
+          createdAt?: { toDate?: () => Date } | string;
+          updatedAt?: { toDate?: () => Date } | string;
+        };
+        const createdAt = data.createdAt && typeof data.createdAt !== "string" && data.createdAt.toDate
+          ? data.createdAt.toDate()
+          : data.createdAt
+            ? new Date(data.createdAt)
+            : null;
+        const updatedAt = data.updatedAt && typeof data.updatedAt !== "string" && data.updatedAt.toDate
+          ? data.updatedAt.toDate()
+          : data.updatedAt
+            ? new Date(data.updatedAt)
+            : null;
+        return {
+          id: entry.id,
+          ownerId: data.ownerId,
+          name: data.name,
+          description: data.description || "",
+          isPublic: Boolean(data.isPublic),
+          items: Array.isArray(data.items) ? data.items : [],
+          createdAt,
+          updatedAt
+        };
+      });
+      const sorted = items.sort((a, b) => {
+        if (!a.updatedAt && !b.updatedAt) return 0;
+        if (!a.updatedAt) return 1;
+        if (!b.updatedAt) return -1;
+        return b.updatedAt.getTime() - a.updatedAt.getTime();
+      });
+      setUserLists(sorted);
+    } catch (error) {
+      console.error("Errore nel caricamento delle liste:", error);
+      setListError("Impossibile caricare le liste");
+    } finally {
+      setIsListsLoading(false);
+    }
+  }, [canAccess, user]);
+
+  useEffect(() => {
+    void loadUserLists();
+  }, [loadUserLists]);
+
+  const handleCreateList = async () => {
+    if (!canAccess || !user) {
+      toast({
+        title: "Accedi per creare una lista",
+        description: "Effettua l'accesso per creare una lista personale",
+        variant: "destructive"
+      });
+      return;
+    }
+    if (!newListName.trim()) {
+      setListError("Inserisci un nome per la lista");
+      return;
+    }
+    if (!isFirebaseEnabled) {
+      setListError("Firebase non configurato");
+      return;
+    }
+    setIsCreatingList(true);
+    setListError(null);
+    try {
+      const db = await getDb();
+      const firestore = await getFirestoreModule();
+      if (!db) {
+        setListError("Firebase non configurato");
+        return;
+      }
+      const { addDoc, collection, serverTimestamp } = firestore;
+      await addDoc(collection(db, "user_lists"), {
+        ownerId: user.uid,
+        name: newListName.trim(),
+        description: newListDescription.trim(),
+        isPublic: isListPublic,
+        items: [],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      setNewListName("");
+      setNewListDescription("");
+      setIsListPublic(true);
+      await loadUserLists();
+      toast({
+        title: "Lista creata",
+        description: "La tua lista è pronta"
+      });
+    } catch (error) {
+      console.error("Errore nella creazione lista:", error);
+      setListError("Errore nella creazione lista");
+    } finally {
+      setIsCreatingList(false);
+    }
+  };
+
+  const handleAddToList = async () => {
+    if (!id || !mediaType || !media) return;
+    if (!canAccess || !user) {
+      toast({
+        title: "Accedi per salvare",
+        description: "Effettua l'accesso per salvare in una lista",
+        variant: "destructive"
+      });
+      return;
+    }
+    if (!selectedListId) {
+      setListError("Seleziona una lista");
+      return;
+    }
+    if (!isFirebaseEnabled) {
+      setListError("Firebase non configurato");
+      return;
+    }
+    setIsAddingToList(true);
+    setListError(null);
+    try {
+      const db = await getDb();
+      const firestore = await getFirestoreModule();
+      if (!db) {
+        setListError("Firebase non configurato");
+        return;
+      }
+      const { doc, getDoc, setDoc, serverTimestamp } = firestore;
+      const listRef = doc(db, "user_lists", selectedListId);
+      const snapshot = await getDoc(listRef);
+      if (!snapshot.exists()) {
+        setListError("Lista non trovata");
+        return;
+      }
+      const data = snapshot.data() as Omit<UserList, "id">;
+      const existingItems = Array.isArray(data.items) ? data.items : [];
+      const newItem: UserListItem = {
+        mediaId: Number(id),
+        mediaType,
+        title: mediaTitle,
+        posterPath: media.poster_path || null
+      };
+      const alreadyExists = existingItems.some((item) => item.mediaId === newItem.mediaId && item.mediaType === newItem.mediaType);
+      const updatedItems = alreadyExists ? existingItems : [newItem, ...existingItems];
+      await setDoc(listRef, {
+        items: updatedItems,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      await loadUserLists();
+      await logActivity({ type: "list_add", listId: selectedListId, listName: data.name });
+      toast({
+        title: "Aggiunto alla lista",
+        description: alreadyExists ? "Questo titolo era già presente" : "Titolo aggiunto con successo"
+      });
+    } catch (error) {
+      console.error("Errore nel salvataggio in lista:", error);
+      setListError("Errore nel salvataggio in lista");
+    } finally {
+      setIsAddingToList(false);
+    }
+  };
+
   const formatCommentDate = (value?: Date | null) => {
     if (!value) return "";
     return value.toLocaleDateString("it-IT", {
@@ -357,6 +613,7 @@ const MediaDetailsPage = () => {
         rating: ratingValue,
         updatedAt: serverTimestamp()
       }, { merge: true });
+      await logActivity({ type: "rating", rating: ratingValue });
       await loadRatings();
       toast({
         title: "Voto salvato",
@@ -407,6 +664,7 @@ const MediaDetailsPage = () => {
         text: commentText.trim(),
         createdAt: serverTimestamp()
       });
+      await logActivity({ type: "comment", commentText: commentText.trim() });
       setCommentText("");
       await loadComments();
       toast({
@@ -998,6 +1256,61 @@ const MediaDetailsPage = () => {
                       </Button>
                     </div>
                   </form>
+
+                  <div className="bg-secondary/10 rounded-lg p-4 border border-white/5 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm text-muted-foreground">Le tue liste</div>
+                        <div className="text-lg font-semibold">Salva in lista</div>
+                      </div>
+                      {isListsLoading && (
+                        <div className="text-sm text-muted-foreground">Caricamento liste...</div>
+                      )}
+                    </div>
+                    {listError && <div className="text-sm text-destructive">{listError}</div>}
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <select
+                        value={selectedListId}
+                        onChange={(event) => setSelectedListId(event.target.value)}
+                        className="w-full bg-background border border-white/10 rounded-md px-3 py-2 text-sm"
+                      >
+                        <option value="">Seleziona lista</option>
+                        {userLists.map((list) => (
+                          <option key={list.id} value={list.id}>{list.name}</option>
+                        ))}
+                      </select>
+                      <Button type="button" disabled={isAddingToList} onClick={handleAddToList}>
+                        {isAddingToList ? "Salvataggio..." : "Aggiungi"}
+                      </Button>
+                    </div>
+                    <div className="border-t border-white/5 pt-4 space-y-3">
+                      <div className="text-sm text-muted-foreground">Crea nuova lista</div>
+                      <input
+                        value={newListName}
+                        onChange={(event) => setNewListName(event.target.value)}
+                        placeholder="Nome lista"
+                        className="w-full bg-background border border-white/10 rounded-md px-3 py-2 text-sm"
+                      />
+                      <textarea
+                        value={newListDescription}
+                        onChange={(event) => setNewListDescription(event.target.value)}
+                        rows={2}
+                        placeholder="Descrizione (opzionale)"
+                        className="w-full bg-background border border-white/10 rounded-md px-3 py-2 text-sm resize-none"
+                      />
+                      <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <input
+                          type="checkbox"
+                          checked={isListPublic}
+                          onChange={(event) => setIsListPublic(event.target.checked)}
+                        />
+                        Lista pubblica
+                      </label>
+                      <Button type="button" disabled={isCreatingList} onClick={handleCreateList}>
+                        {isCreatingList ? "Creazione..." : "Crea lista"}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               )}
 
