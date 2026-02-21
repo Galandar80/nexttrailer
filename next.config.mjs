@@ -1,6 +1,12 @@
 const nextConfig = {
   images: {
-    unoptimized: true
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "image.tmdb.org",
+        pathname: "/t/p/**"
+      }
+    ]
   },
   env: {
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL ?? process.env.VITE_PUBLIC_SITE_URL,

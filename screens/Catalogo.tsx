@@ -218,7 +218,9 @@ const Catalogo = () => {
                   <OptimizedImage
                     src="https://upload.wikimedia.org/wikipedia/commons/d/de/HBO_logo.svg"
                     alt="HBO"
-                    className="h-6 w-auto object-contain"
+                    className="h-5 w-auto object-contain"
+                    width={64}
+                    height={20}
                     loading="lazy"
                   />
                 }
@@ -233,7 +235,9 @@ const Catalogo = () => {
                   <OptimizedImage
                     src="https://upload.wikimedia.org/wikipedia/commons/0/08/Netflix_2015_logo.svg"
                     alt="Netflix"
-                    className="h-6 w-auto object-contain"
+                    className="h-5 w-auto object-contain"
+                    width={88}
+                    height={20}
                     loading="lazy"
                   />
                 }
@@ -248,7 +252,9 @@ const Catalogo = () => {
                   <OptimizedImage
                     src="https://upload.wikimedia.org/wikipedia/commons/f/f1/Prime_Video.png"
                     alt="Prime Video"
-                    className="h-6 w-auto object-contain"
+                    className="h-5 w-auto object-contain"
+                    width={96}
+                    height={20}
                     loading="lazy"
                   />
                 }
@@ -263,7 +269,9 @@ const Catalogo = () => {
                   <OptimizedImage
                     src="https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg"
                     alt="Disney+"
-                    className="h-6 w-auto object-contain"
+                    className="h-5 w-auto object-contain"
+                    width={88}
+                    height={20}
                     loading="lazy"
                   />
                 }

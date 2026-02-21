@@ -8,7 +8,6 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { useApiKeyStore } from "@/store/useApiKeyStore";
 import { AuthProvider } from "@/context/AuthContext";
-import { HelmetProvider } from "react-helmet-async";
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   const { apiKey, accessToken } = useApiKeyStore();
@@ -30,17 +29,15 @@ export default function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <ErrorBoundary>
-      <HelmetProvider>
-        <AuthProvider>
-          <QueryClientProvider client={queryClient}>
-            <TooltipProvider>
-              <Toaster />
-              <Sonner />
-              {children}
-            </TooltipProvider>
-          </QueryClientProvider>
-        </AuthProvider>
-      </HelmetProvider>
+      <AuthProvider>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            {children}
+          </TooltipProvider>
+        </QueryClientProvider>
+      </AuthProvider>
     </ErrorBoundary>
   );
 }

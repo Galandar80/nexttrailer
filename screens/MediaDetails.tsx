@@ -1107,7 +1107,14 @@ const MediaDetailsPage = () => {
           {/* Poster */}
           <div className="w-full lg:w-1/4 flex-shrink-0">
             <div className="rounded-lg overflow-hidden border-2 border-muted/20 shadow-xl">
-              <OptimizedImage src={posterUrl} alt={title || ""} className="w-full aspect-[2/3] object-cover" loading="lazy" />
+              <OptimizedImage
+                src={posterUrl}
+                alt={title || ""}
+                className="w-full aspect-[2/3] object-cover"
+                width={342}
+                height={513}
+                loading="lazy"
+              />
             </div>
           </div>
 

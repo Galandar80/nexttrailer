@@ -22,6 +22,27 @@ export const OptimizedImage = ({
 }: OptimizedImageProps) => {
     const [isLoaded, setIsLoaded] = useState(false);
     const [hasError, setHasError] = useState(false);
+    const shouldFill = width == null && height == null;
+    const siteHost = (() => {
+        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
+        try {
+            return new URL(siteUrl).hostname;
+        } catch {
+            return "";
+        }
+    })();
+    const isExternal = src.startsWith("http");
+    const isAllowedExternal = (() => {
+        if (!isExternal) return true;
+        try {
+            const hostname = new URL(src).hostname;
+            if (hostname === "image.tmdb.org") return true;
+            if (siteHost && hostname === siteHost) return true;
+            return false;
+        } catch {
+            return false;
+        }
+    })();
 
     if (hasError) {
         return (
@@ -33,8 +54,32 @@ export const OptimizedImage = ({
         );
     }
 
+    if (isExternal && !isAllowedExternal) {
+        const fallbackStyle = shouldFill ? { width: "100%", height: "100%", ...style } : { ...style };
+        return (
+            <div className={`relative${shouldFill ? " w-full h-full" : ""}`}>
+                {!isLoaded && (
+                    <div
+                        className={`absolute inset-0 bg-secondary/20 animate-pulse ${className}`}
+                    />
+                )}
+                <img
+                    src={src}
+                    alt={alt}
+                    loading={loading}
+                    style={fallbackStyle}
+                    width={shouldFill ? undefined : width}
+                    height={shouldFill ? undefined : height}
+                    className={`${className} ${!isLoaded ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}
+                    onLoad={() => setIsLoaded(true)}
+                    onError={() => setHasError(true)}
+                />
+            </div>
+        );
+    }
+
     return (
-        <div className="relative">
+        <div className={`relative${shouldFill ? " w-full h-full" : ""}`}>
             {!isLoaded && (
                 <div
                     className={`absolute inset-0 bg-secondary/20 animate-pulse ${className}`}
@@ -45,9 +90,10 @@ export const OptimizedImage = ({
                 alt={alt}
                 loading={loading}
                 sizes={sizes}
-                width={width ?? 1}
-                height={height ?? 1}
-                style={{ width: "100%", height: "100%", ...style }}
+                fill={shouldFill}
+                width={shouldFill ? undefined : width}
+                height={shouldFill ? undefined : height}
+                style={{ ...style }}
                 className={`${className} ${!isLoaded ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}
                 onLoadingComplete={() => setIsLoaded(true)}
                 onError={() => setHasError(true)}
