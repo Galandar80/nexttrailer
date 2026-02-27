@@ -45,7 +45,7 @@ const COMINGSOON_FEED_URL = "https://www.comingsoon.it/feedrss/cinema";
 const MAX_ARTICLES = 3;
 const MAX_COMINGSOON = 6;
 const PAGE_SIZE = 12;
-const AUTO_REFRESH_MS = 1000 * 60 * 60 * 6;
+const AUTO_REFRESH_MS = 1000 * 60 * 30;
 
 const loadFirestore = async () => {
   if (!isFirebaseEnabled) return null;
