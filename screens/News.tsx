@@ -2,17 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Newspaper } from "lucide-react";
-import type { QueryDocumentSnapshot } from "firebase/firestore";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
 import { SEO } from "@/components/SEO";
-import { getDb, getFirestoreModule, isFirebaseEnabled } from "@/services/firebase";
-import { useAuth } from "@/context/auth-core";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
+import { getDb, getFirestoreModule, isFirebaseEnabled } from "@/services/firebase";
 import { OptimizedImage } from "@/components/OptimizedImage";
+import { useAuth } from "@/context/auth-core";
 
 type RawRssItem = {
   title: string;
@@ -44,16 +43,15 @@ const DEFAULT_FEED_URL = "https://www.bestmovie.it/feed/";
 const COMINGSOON_FEED_URL = "https://www.comingsoon.it/feedrss/cinema";
 const MAX_ARTICLES = 3;
 const MAX_COMINGSOON = 6;
-const PAGE_SIZE = 12;
-const AUTO_REFRESH_MS = 1000 * 60 * 30;
-
+const PAGE_SIZE = 18;
+const MAX_ARCHIVE = 200;
+const AUTO_REFRESH_MS = 1000 * 60 * 1;
 const loadFirestore = async () => {
   if (!isFirebaseEnabled) return null;
   const [db, firestore] = await Promise.all([getDb(), getFirestoreModule()]);
   if (!db) return null;
   return { db, ...firestore };
 };
-
 const normalizeText = (value: unknown) => {
   if (typeof value !== "string") {
     if (value === null || value === undefined) return "";
@@ -61,31 +59,17 @@ const normalizeText = (value: unknown) => {
   }
   return value.replace(/\s+/g, " ").trim();
 };
-
- 
-
 const extractImageUrl = (html: string) => {
   if (!html) return undefined;
   const doc = new DOMParser().parseFromString(html, "text/html");
   const img = doc.querySelector("img");
   return img?.getAttribute("src") || undefined;
 };
-
 const extractText = (html: string) => {
   if (!html) return "";
   const doc = new DOMParser().parseFromString(html, "text/html");
   return normalizeText(doc.body.textContent || "");
 };
-
-const isWikipediaImage = (url?: string) => {
-  if (!url) return false;
-  return url.includes("wikipedia.org") || url.includes("wikimedia.org");
-};
-
-const stripWikipediaImages = (items: NewsArticle[]) => {
-  return items.map((item) => (isWikipediaImage(item.imageUrl) ? { ...item, imageUrl: "" } : item));
-};
-
 const buildFeedCandidates = (url: string) => {
   const cleanUrl = url.trim();
   const withoutProtocol = cleanUrl.replace(/^https?:\/\//, "");
@@ -98,7 +82,6 @@ const buildFeedCandidates = (url: string) => {
     cleanUrl
   ];
 };
-
 const fetchText = async (url: string) => {
   const response = await fetch(url, { cache: "no-store" });
   if (!response.ok) {
@@ -106,7 +89,6 @@ const fetchText = async (url: string) => {
   }
   return response.text();
 };
-
 const fetchFeedViaServer = async (url: string) => {
   const response = await fetch(`/api/rss?url=${encodeURIComponent(url)}`, { cache: "no-store" });
   if (!response.ok) {
@@ -114,7 +96,6 @@ const fetchFeedViaServer = async (url: string) => {
   }
   return response.text();
 };
-
 const fetchFeedXml = async (url: string) => {
   const candidates = buildFeedCandidates(url);
   const errors: string[] = [];
@@ -134,7 +115,6 @@ const fetchFeedXml = async (url: string) => {
   }
   throw new Error(`Impossibile leggere il feed. ${errors.join(" | ")}`);
 };
-
 const parseRss = (xmlText: string): RawRssItem[] => {
   const xml = new DOMParser().parseFromString(xmlText, "text/xml");
   const items = Array.from(xml.getElementsByTagName("item"));
@@ -161,9 +141,8 @@ const parseRss = (xmlText: string): RawRssItem[] => {
     };
   }).filter((item) => item.title && item.link);
 };
-
 const buildPrompt = (item: RawRssItem) => {
-  const trimmed = item.contentText.slice(0, 6000);
+  const trimmed = item.contentText.slice(0, 3500);
   return [
     "Sei un editor di news sul cinema e streaming.",
     "Riscrivi l'articolo in italiano con parole e struttura diverse dall'originale.",
@@ -177,14 +156,11 @@ const buildPrompt = (item: RawRssItem) => {
     `Testo articolo: ${trimmed}`
   ].join("\n");
 };
-
 const MIN_BODY_WORDS = 250;
-
 const countWords = (text: string) => {
   if (!text) return 0;
   return text.trim().split(/\s+/).filter(Boolean).length;
 };
-
 const buildExpansionPrompt = (
   item: RawRssItem,
   title: string,
@@ -193,7 +169,7 @@ const buildExpansionPrompt = (
   bullets: string[],
   minWords: number
 ) => {
-  const trimmed = item.contentText.slice(0, 6000);
+  const trimmed = item.contentText.slice(0, 3500);
   return [
     "Sei un editor di news sul cinema e streaming.",
     `Espandi il testo seguente fino ad almeno ${minWords} parole, mantenendo contenuti e stile.`,
@@ -210,7 +186,6 @@ const buildExpansionPrompt = (
     `Testo attuale: ${body}`
   ].join("\n");
 };
-
 const toDocId = (value: string) => encodeURIComponent(value);
 const toPublicId = (value: string) => {
   let hash1 = 0;
@@ -241,7 +216,6 @@ const normalizeStoredArticles = (items: NewsArticle[]) => {
     return { ...item, id: item.id || derivedId, publicId };
   }).filter((item) => item.id);
 };
-
 const normalizeComingsoonArticles = (items: NewsArticle[]) => {
   return items.map((item) => {
     const derivedId = item.sourceUrl ? toDocId(item.sourceUrl) : "";
@@ -250,14 +224,16 @@ const normalizeComingsoonArticles = (items: NewsArticle[]) => {
   }).filter((item) => item.id);
 };
 
-const withPublicId = (item: NewsArticle) => {
-  const publicId = item.publicId || (item.sourceUrl ? toPublicId(item.sourceUrl) : "");
-  if (!publicId || publicId === item.publicId) return item;
-  return { ...item, publicId };
-};
-
 const getArticleLinkId = (item: NewsArticle) => item.publicId || (item.sourceUrl ? toPublicId(item.sourceUrl) : item.id);
 
+const isWikipediaImage = (url?: string) => {
+  if (!url) return false;
+  return url.includes("wikipedia.org") || url.includes("wikimedia.org");
+};
+
+const stripWikipediaImages = (items: NewsArticle[]) => {
+  return items.map((item) => (isWikipediaImage(item.imageUrl) ? { ...item, imageUrl: "" } : item));
+};
 const extractJson = (value: string) => {
   const fenced = value.match(/```json\s*([\s\S]*?)```/i);
   if (fenced?.[1]) return fenced[1].trim();
@@ -268,9 +244,7 @@ const extractJson = (value: string) => {
   }
   return value.trim();
 };
-
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 const callGroq = async (prompt: string) => {
   const apiKey = process.env.NEXT_PUBLIC_GROQ_API_KEY as string | undefined;
   if (!apiKey) {
@@ -278,9 +252,9 @@ const callGroq = async (prompt: string) => {
   }
   const model = (process.env.NEXT_PUBLIC_GROQ_MODEL as string | undefined) || "llama-3.1-8b-instant";
   let lastError: Error | null = null;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
     try {
       const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
@@ -310,8 +284,12 @@ const callGroq = async (prompt: string) => {
         }
         const error = new Error(`Groq ${response.status}: ${message || "Errore richiesta"}`);
         lastError = error;
-        if (response.status >= 500 || response.status === 429) {
-          await sleep(700 * (attempt + 1));
+        if (response.status === 429) {
+          await sleep(10000 * (attempt + 1));
+          continue;
+        }
+        if (response.status >= 500) {
+          await sleep(2000 * (attempt + 1));
           continue;
         }
         throw error;
@@ -330,8 +308,8 @@ const callGroq = async (prompt: string) => {
       if (err.name === "AbortError") {
         lastError = new Error("Groq timeout");
       }
-      if (attempt < 2) {
-        await sleep(700 * (attempt + 1));
+      if (attempt < 4) {
+        await sleep(5000 * (attempt + 1));
         continue;
       }
       throw lastError;
@@ -341,7 +319,6 @@ const callGroq = async (prompt: string) => {
   }
   throw lastError || new Error("Errore richiesta Groq");
 };
-
 const rewriteWithMinWords = async (item: RawRssItem) => {
   let prompt = buildPrompt(item);
   const rewritten = await callGroq(prompt);
@@ -355,6 +332,8 @@ const rewriteWithMinWords = async (item: RawRssItem) => {
     if (countWords(body) >= MIN_BODY_WORDS) {
       return { title, subtitle, body, bullets };
     }
+    // Wait before expansion to respect rate limits
+    await sleep(20000);
     prompt = buildExpansionPrompt(item, title, subtitle, body, bullets, MIN_BODY_WORDS);
     const expanded = await callGroq(prompt);
     title = normalizeText(expanded.title || title || item.title);
@@ -371,114 +350,77 @@ const News = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   const [articles, setArticles] = useState<NewsArticle[]>([]);
-  const [topArticles, setTopArticles] = useState<NewsArticle[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [lastError, setLastError] = useState<string | null>(null);
-  const [autoRefreshDone, setAutoRefreshDone] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
-  const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot | null>(null);
   const [localAllArticles, setLocalAllArticles] = useState<NewsArticle[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [autoRefreshDone, setAutoRefreshDone] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [monthFilter, setMonthFilter] = useState("");
+  const [lastError, setLastError] = useState<string | null>(null);
   const isSuperAdmin = user?.email?.toLowerCase() === "calisma82@gmail.com";
 
   const feedUrl = useMemo(() => {
     return (process.env.NEXT_PUBLIC_NEWS_RSS_URL as string | undefined) || DEFAULT_FEED_URL;
   }, []);
 
-  const loadInitialArticles = useCallback(async (skipLoading = false) => {
-    const stored = stripWikipediaImages(
+  const loadInitialArticles = useCallback(async () => {
+    const storedNews = stripWikipediaImages(
       normalizeStoredArticles(parseStoredArticles(localStorage.getItem(STORAGE_KEY)))
     );
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
-    if (!skipLoading) {
-      setIsLoading(true);
-    }
-    setLastError(null);
+    const storedComing = stripWikipediaImages(
+      normalizeStoredArticles(parseStoredArticles(localStorage.getItem(COMINGSOON_STORAGE_KEY)))
+    );
+    const stored = [...storedNews, ...storedComing];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(storedNews));
+    localStorage.setItem(COMINGSOON_STORAGE_KEY, JSON.stringify(storedComing));
+    setIsLoading(true);
     const firestore = await loadFirestore();
     if (!firestore) {
-      setLocalAllArticles(stored);
-      setArticles(stored.slice(0, PAGE_SIZE));
-      setHasMore(stored.length > PAGE_SIZE);
-      if (!skipLoading) {
-        setIsLoading(false);
-      }
+      const sorted = [...stored].sort((a, b) => b.publishedAtTs - a.publishedAtTs);
+      setLocalAllArticles(sorted);
+      setArticles(sorted.slice(0, PAGE_SIZE));
+      setHasMore(sorted.length > PAGE_SIZE);
+      setIsLoading(false);
       return;
     }
     try {
-      const { db, collection, doc, getDocs, limit, orderBy, query, setDoc } = firestore;
-      const newsQuery = query(collection(db, "news_articles"), orderBy("publishedAtTs", "desc"), limit(PAGE_SIZE));
-      const snapshot = await getDocs(newsQuery);
-      const fetched = stripWikipediaImages(snapshot.docs.map((entry) => {
+      const { db, collection, getDocs, limit, orderBy, query } = firestore;
+      const [newsSnapshot, comingSnapshot] = await Promise.all([
+        getDocs(query(collection(db, "news_articles"), orderBy("publishedAtTs", "desc"), limit(MAX_ARCHIVE))),
+        getDocs(query(collection(db, "news_comingsoon"), orderBy("publishedAtTs", "desc"), limit(MAX_ARCHIVE)))
+      ]);
+      const fetchedNews = stripWikipediaImages(newsSnapshot.docs.map((entry) => {
         const data = entry.data() as NewsArticle;
-        const normalized = withPublicId({ ...data, id: data.id || entry.id });
-        if (!data.publicId && normalized.publicId) {
-          void setDoc(doc(db, "news_articles", entry.id), { publicId: normalized.publicId }, { merge: true });
-        }
-        return normalized;
+        return { ...data, id: data.id || entry.id, publicId: data.publicId || (data.sourceUrl ? toPublicId(data.sourceUrl) : "") };
       }));
-      const fetchedIds = new Set(fetched.map((item) => item.id));
-      const merged = stripWikipediaImages([...fetched, ...stored.filter((item) => !fetchedIds.has(item.id))]);
-      setArticles(fetched);
+      const fetchedComing = stripWikipediaImages(comingSnapshot.docs.map((entry) => {
+        const data = entry.data() as NewsArticle;
+        return { ...data, id: data.id || entry.id, publicId: data.publicId || (data.sourceUrl ? toPublicId(data.sourceUrl) : "") };
+      }));
+      const fetchedNewsIds = new Set(fetchedNews.map((item) => item.id));
+      const fetchedComingIds = new Set(fetchedComing.map((item) => item.id));
+      const mergedNews = stripWikipediaImages([...fetchedNews, ...storedNews.filter((item) => !fetchedNewsIds.has(item.id))]);
+      const mergedComing = stripWikipediaImages([...fetchedComing, ...storedComing.filter((item) => !fetchedComingIds.has(item.id))]);
+      const merged = stripWikipediaImages([...mergedNews, ...mergedComing]).sort((a, b) => b.publishedAtTs - a.publishedAtTs);
+      setArticles(merged.slice(0, PAGE_SIZE));
       setLocalAllArticles(merged);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-      setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
-      setHasMore(snapshot.docs.length === PAGE_SIZE);
-    } catch {
-      setLocalAllArticles(stored);
-      setArticles(stored.slice(0, PAGE_SIZE));
-      setHasMore(stored.length > PAGE_SIZE);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedNews));
+      localStorage.setItem(COMINGSOON_STORAGE_KEY, JSON.stringify(mergedComing));
+      setHasMore(merged.length > PAGE_SIZE);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Errore caricamento archivio";
+      setLastError(message);
+      toast({ title: message, variant: "destructive" });
+      const sorted = [...stored].sort((a, b) => b.publishedAtTs - a.publishedAtTs);
+      setLocalAllArticles(sorted);
+      setArticles(sorted.slice(0, PAGE_SIZE));
+      setHasMore(sorted.length > PAGE_SIZE);
     } finally {
-      if (!skipLoading) {
-        setIsLoading(false);
-      }
+      setIsLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    loadInitialArticles();
-  }, [loadInitialArticles]);
-
-  useEffect(() => {
-    const loadTopArticles = async () => {
-      const stored = stripWikipediaImages(
-        normalizeComingsoonArticles(parseStoredArticles(localStorage.getItem(COMINGSOON_STORAGE_KEY)))
-      );
-      localStorage.setItem(COMINGSOON_STORAGE_KEY, JSON.stringify(stored));
-      const firestore = await loadFirestore();
-      if (!firestore) {
-        if (stored.length > 0) {
-          setTopArticles(stored);
-        }
-        return;
-      }
-      try {
-        const { db, collection, doc, getDocs, limit, orderBy, query, setDoc } = firestore;
-        const newsQuery = query(collection(db, "news_comingsoon"), orderBy("publishedAtTs", "desc"), limit(MAX_COMINGSOON));
-        const snapshot = await getDocs(newsQuery);
-        const fetched = stripWikipediaImages(snapshot.docs.map((entry) => {
-          const data = entry.data() as NewsArticle;
-          const normalized = withPublicId({ ...data, id: data.id || entry.id });
-          if (!data.publicId && normalized.publicId) {
-            void setDoc(doc(db, "news_comingsoon", entry.id), { publicId: normalized.publicId }, { merge: true });
-          }
-          return normalized;
-        }));
-        if (fetched.length > 0) {
-          setTopArticles(fetched);
-          localStorage.setItem(COMINGSOON_STORAGE_KEY, JSON.stringify(fetched));
-          return;
-        }
-        if (stored.length > 0) {
-          setTopArticles(stored);
-        }
-      } catch {
-        if (stored.length > 0) {
-          setTopArticles(stored);
-        }
-      }
-    };
-    loadTopArticles();
-  }, []);
+  }, [toast]);
 
   const refreshComingsoon = useCallback(async () => {
     const cached = normalizeComingsoonArticles(parseStoredArticles(localStorage.getItem(COMINGSOON_STORAGE_KEY)));
@@ -488,6 +430,8 @@ const News = () => {
     const refreshed: NewsArticle[] = [];
     const refreshedIds = new Set<string>();
     for (const item of items) {
+      // Wait 20 seconds between items to avoid rate limit
+      await sleep(20000);
       const docId = toDocId(item.link);
       const { title, subtitle, body, bullets } = await rewriteWithMinWords(item);
       const publishedAtTs = Date.parse(item.publishedAt) || Date.now();
@@ -516,20 +460,11 @@ const News = () => {
       ...refreshed,
       ...cached.filter((article) => !refreshedIds.has(article.id))
     ].sort((a, b) => b.publishedAtTs - a.publishedAtTs);
-    setTopArticles(merged);
     localStorage.setItem(COMINGSOON_STORAGE_KEY, JSON.stringify(merged));
   }, []);
 
-  useEffect(() => {
-    refreshComingsoon().catch((error) => {
-      const message = error instanceof Error ? error.message : "Errore aggiornamento news in evidenza";
-      setLastError(message);
-      toast({ title: message, variant: "destructive" });
-    });
-  }, [refreshComingsoon, toast]);
-
   const handleRefresh = useCallback(async () => {
-    setIsLoading(true);
+    setIsRefreshing(true);
     setLastError(null);
     try {
       const cachedArticles = normalizeStoredArticles(parseStoredArticles(localStorage.getItem(STORAGE_KEY)));
@@ -539,6 +474,8 @@ const News = () => {
       const refreshed: NewsArticle[] = [];
       const refreshedIds = new Set<string>();
       for (const item of items) {
+        // Wait 20 seconds between items to avoid rate limit
+        await sleep(20000);
         const docId = toDocId(item.link);
         const { title, subtitle, body, bullets } = await rewriteWithMinWords(item);
         const publishedAtTs = Date.parse(item.publishedAt) || Date.now();
@@ -577,7 +514,7 @@ const News = () => {
         const { db, doc, setDoc } = firestore;
         const metaRef = doc(db, "news_meta", "global");
         await setDoc(metaRef, { lastRefreshAt: Date.now() }, { merge: true });
-        await loadInitialArticles(true);
+        await loadInitialArticles();
       }
       await refreshComingsoon();
       toast({ title: "News aggiornate" });
@@ -586,69 +523,9 @@ const News = () => {
       setLastError(message);
       toast({ title: message, variant: "destructive" });
     } finally {
-      setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, [feedUrl, loadInitialArticles, refreshComingsoon, toast]);
-
-  const handleLoadMore = useCallback(async () => {
-    if (isLoadingMore) return;
-    const firestore = await loadFirestore();
-    if (!firestore) {
-      const next = localAllArticles.slice(0, articles.length + PAGE_SIZE);
-      setArticles(next);
-      setHasMore(localAllArticles.length > next.length);
-      return;
-    }
-    if (!lastDoc) {
-      setHasMore(false);
-      return;
-    }
-    setIsLoadingMore(true);
-    try {
-      const { db, collection, doc, getDocs, limit, orderBy, query, setDoc, startAfter } = firestore;
-      const newsQuery = query(
-        collection(db, "news_articles"),
-        orderBy("publishedAtTs", "desc"),
-        startAfter(lastDoc),
-        limit(PAGE_SIZE)
-      );
-      const snapshot = await getDocs(newsQuery);
-      const fetched = stripWikipediaImages(snapshot.docs.map((entry) => {
-        const data = entry.data() as NewsArticle;
-        const normalized = withPublicId({ ...data, id: data.id || entry.id });
-        if (!data.publicId && normalized.publicId) {
-          void setDoc(doc(db, "news_articles", entry.id), { publicId: normalized.publicId }, { merge: true });
-        }
-        return normalized;
-      }));
-      if (fetched.length > 0) {
-        setArticles((prev) => [...prev, ...fetched]);
-        setLocalAllArticles((prev) => {
-          const existingIds = new Set(prev.map((item) => item.id));
-          const merged = [...prev];
-          for (const item of fetched) {
-            if (!existingIds.has(item.id)) {
-              merged.push(item);
-            }
-          }
-          return stripWikipediaImages(merged.sort((a, b) => b.publishedAtTs - a.publishedAtTs));
-        });
-        const stored = stripWikipediaImages(
-          normalizeStoredArticles(parseStoredArticles(localStorage.getItem(STORAGE_KEY)))
-        );
-        const storedIds = new Set(stored.map((item) => item.id));
-        const mergedStored = stripWikipediaImages([...stored, ...fetched.filter((item) => !storedIds.has(item.id))]);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedStored));
-      }
-      setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
-      setHasMore(snapshot.docs.length === PAGE_SIZE);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Errore caricamento altre news";
-      toast({ title: message, variant: "destructive" });
-    } finally {
-      setIsLoadingMore(false);
-    }
-  }, [articles.length, isLoadingMore, lastDoc, localAllArticles, toast]);
 
   useEffect(() => {
     const autoRefresh = async () => {
@@ -678,7 +555,36 @@ const News = () => {
     autoRefresh();
   }, [autoRefreshDone, handleRefresh]);
 
-  const heroImage = topArticles.find((article) => article.imageUrl)?.imageUrl || "";
+  useEffect(() => {
+    loadInitialArticles();
+  }, [loadInitialArticles]);
+
+  const handleLoadMore = useCallback(() => {
+    if (isLoadingMore) return;
+    setIsLoadingMore(true);
+    const next = localAllArticles.slice(0, articles.length + PAGE_SIZE);
+    setArticles(next);
+    setHasMore(localAllArticles.length > next.length);
+    setIsLoadingMore(false);
+  }, [articles.length, isLoadingMore, localAllArticles]);
+
+  const filteredArticles = useMemo(() => {
+    const search = searchTerm.trim().toLowerCase();
+    return articles.filter((article) => {
+      const text = `${article.title} ${article.subtitle} ${article.body}`.toLowerCase();
+      const matchesSearch = !search || text.includes(search);
+      if (!monthFilter) {
+        return matchesSearch;
+      }
+      const date = article.publishedAtTs ? new Date(article.publishedAtTs) : new Date(article.publishedAt);
+      if (Number.isNaN(date.getTime())) {
+        return false;
+      }
+      const [year, month] = monthFilter.split("-").map((value) => parseInt(value, 10));
+      const matchesMonth = date.getFullYear() === year && date.getMonth() + 1 === month;
+      return matchesSearch && matchesMonth;
+    });
+  }, [articles, monthFilter, searchTerm]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -689,14 +595,14 @@ const News = () => {
         <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-3xl font-poster mb-2">News</h1>
-            <Button asChild variant="outline">
-              <Link href="/news/archivio">Archivio news</Link>
-            </Button>
+            <p className="text-muted-foreground">
+              {filteredArticles.length} {filteredArticles.length === 1 ? "articolo" : "articoli"} trovati
+            </p>
           </div>
           {isSuperAdmin && (
             <div className="flex flex-wrap gap-3">
-              <Button className="bg-accent hover:bg-accent/90" onClick={handleRefresh} disabled={isLoading}>
-                {isLoading ? "Aggiornamento..." : "Aggiorna da RSS"}
+              <Button className="bg-accent hover:bg-accent/90" onClick={handleRefresh} disabled={isRefreshing}>
+                {isRefreshing ? "Aggiornamento..." : "Aggiorna da RSS"}
               </Button>
               <Button asChild variant="outline">
                 <Link href="/news/admin">Gestisci news</Link>
@@ -705,119 +611,84 @@ const News = () => {
           )}
         </div>
 
-        {topArticles.length > 0 && (
-          <section className="mb-12 grid gap-6 lg:grid-cols-[2fr,1fr]">
-            <Link
-              href={`/news/article?article=${encodeURIComponent(getArticleLinkId(topArticles[0]))}`}
-              className="relative overflow-hidden rounded-2xl bg-secondary/30 min-h-[320px] flex items-end"
-            >
-              {heroImage ? (
-                <OptimizedImage
-                  src={heroImage}
-                  alt={topArticles[0].title}
-                  className="absolute inset-0 w-full h-full object-cover"
-                  loading="lazy"
-                />
-              ) : (
-                <div className="absolute inset-0 bg-secondary/40" />
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-              <div className="relative z-10 p-6 space-y-2">
-                <p className="text-xs text-white/70">
-                  {topArticles[0].publishedAt
-                    ? new Date(topArticles[0].publishedAt).toLocaleDateString("it-IT", { day: "2-digit", month: "long", year: "numeric" })
-                    : ""}
-                </p>
-                <h2 className="text-2xl md:text-3xl font-semibold text-white">{topArticles[0].title}</h2>
-                <p className="text-sm text-white/80 line-clamp-2">{topArticles[0].subtitle || topArticles[0].body}</p>
-              </div>
-            </Link>
-
-            <div className="grid gap-4">
-              {topArticles.slice(1, 4).map((item) => (
-                <Link
-                  key={item.id}
-                  href={`/news/article?article=${encodeURIComponent(getArticleLinkId(item))}`}
-                  className="flex gap-3 rounded-2xl bg-secondary/20 p-3 hover:bg-secondary/30 transition-colors"
-                >
-                  {item.imageUrl ? (
-                    <OptimizedImage
-                      src={item.imageUrl}
-                      alt={item.title}
-                      className="h-20 w-28 object-cover rounded-xl"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="h-20 w-28 rounded-xl bg-secondary/40" />
-                  )}
-                  <div className="flex-1 space-y-1">
-                    <h3 className="text-sm font-semibold line-clamp-2">{item.title}</h3>
-                    <p className="text-xs text-muted-foreground line-clamp-2">{item.subtitle || item.body}</p>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </section>
+        {lastError && (
+          <div className="text-sm text-red-500 mb-6">{lastError}</div>
         )}
 
-        <section className="mb-12">
-          <div className="flex items-center gap-2 mb-6">
-            <Newspaper className="text-accent" />
-            <h2 className="text-2xl font-medium">Ultime News</h2>
+        <div className="grid gap-4 md:grid-cols-[2fr,1fr] mb-8">
+          <Input
+            placeholder="Cerca per titolo o testo"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+          />
+          <Input
+            type="month"
+            value={monthFilter}
+            onChange={(event) => setMonthFilter(event.target.value)}
+          />
+        </div>
+
+        {(searchTerm || monthFilter) && (
+          <div className="mb-6">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSearchTerm("");
+                setMonthFilter("");
+              }}
+            >
+              Resetta filtri
+            </Button>
           </div>
+        )}
 
-          {lastError && (
-            <div className="text-sm text-red-500 mb-4">{lastError}</div>
-          )}
-
-          {articles.length === 0 && !isLoading ? (
-            <div className="text-muted-foreground">Nessuna news disponibile.</div>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {articles.map((article) => (
-                  <Card key={article.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                    <div className="h-48 overflow-hidden">
-                      {article.imageUrl ? (
-                        <OptimizedImage
-                          src={article.imageUrl}
-                          alt={article.title}
-                          className="w-full h-full object-cover transition-transform hover:scale-105"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-secondary/40" />
-                      )}
+        {articles.length === 0 && !isLoading ? (
+          <div className="text-muted-foreground">Nessuna news disponibile.</div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {filteredArticles.map((article) => (
+                <Card key={article.id} className="overflow-hidden hover:shadow-lg transition-shadow">
+                  <div className="h-48 overflow-hidden">
+                    {article.imageUrl ? (
+                      <OptimizedImage
+                        src={article.imageUrl}
+                        alt={article.title}
+                        className="w-full h-full object-cover transition-transform hover:scale-105"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-secondary/40" />
+                    )}
+                  </div>
+                  <CardContent className="p-4">
+                    <h3 className="font-medium text-lg mb-2 line-clamp-2">{article.title}</h3>
+                    <p className="text-muted-foreground text-sm mb-3 line-clamp-2">
+                      {article.subtitle || article.body || "Nessuna descrizione disponibile."}
+                    </p>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-muted-foreground">
+                        {article.publishedAt
+                          ? new Date(article.publishedAt).toLocaleDateString("it-IT", { day: "2-digit", month: "long", year: "numeric" })
+                          : ""}
+                      </span>
+                      <Button asChild variant="link" className="text-accent">
+                        <Link href={`/news/${encodeURIComponent(getArticleLinkId(article))}`}>Leggi tutto</Link>
+                      </Button>
                     </div>
-                    <CardContent className="p-4">
-                      <h3 className="font-medium text-lg mb-2 line-clamp-2">{article.title}</h3>
-                      <p className="text-muted-foreground text-sm mb-3 line-clamp-2">
-                        {article.subtitle || article.body || "Nessuna descrizione disponibile."}
-                      </p>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-muted-foreground">
-                          {article.publishedAt
-                            ? new Date(article.publishedAt).toLocaleDateString("it-IT", { day: "2-digit", month: "long", year: "numeric" })
-                            : ""}
-                        </span>
-                        <Button asChild variant="link" className="text-accent">
-                          <Link href={`/news/article?article=${encodeURIComponent(getArticleLinkId(article))}`}>Leggi tutto</Link>
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            {hasMore && (
+              <div className="mt-8 text-center">
+                <Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>
+                  {isLoadingMore ? "Caricamento..." : "Carica altri"}
+                </Button>
               </div>
-              {hasMore && (
-                <div className="mt-8 text-center">
-                  <Button variant="outline" onClick={handleLoadMore} disabled={isLoadingMore}>
-                    {isLoadingMore ? "Caricamento..." : "Carica altri"}
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
-        </section>
+            )}
+          </>
+        )}
       </main>
 
       <Footer />

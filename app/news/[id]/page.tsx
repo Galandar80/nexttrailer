@@ -71,6 +71,8 @@ const normalizeImage = (imageUrl: string) => {
   return imageUrl.startsWith("http") ? imageUrl : `${SITE_URL}${imageUrl}`;
 };
 
+import JsonLd from "@/components/JsonLd";
+
 export async function generateMetadata({
   params
 }: {
@@ -108,6 +110,31 @@ export async function generateMetadata({
   };
 }
 
-export default function Page() {
-  return <NewsArticle />;
+export default async function Page({ params }: { params: { id: string } }) {
+  const id = params.id;
+  let article = await fetchDocById("news_articles", id);
+  if (!article) article = await fetchDocById("news_comingsoon", id);
+  if (!article) article = await fetchDocByPublicId("news_articles", id);
+  if (!article) article = await fetchDocByPublicId("news_comingsoon", id);
+
+  const jsonLd = article ? {
+    "@context": "https://schema.org",
+    "@type": "NewsArticle",
+    headline: article.title,
+    image: normalizeImage(article.imageUrl || "") ? [normalizeImage(article.imageUrl || "")] : [],
+    datePublished: article.publishedAt,
+    dateModified: article.publishedAt,
+    description: buildDescription(article.subtitle || "", article.body || ""),
+    author: {
+      "@type": "Person",
+      name: "NextTrailer"
+    }
+  } : null;
+
+  return (
+    <>
+      {jsonLd && <JsonLd data={jsonLd} />}
+      <NewsArticle />
+    </>
+  );
 }
