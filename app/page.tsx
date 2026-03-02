@@ -25,6 +25,11 @@ export const metadata: Metadata = {
     description: "Il primo social network dedicato al mondo del cinema. Gestisci i tuoi film e serie tv e rimani sempre aggiornato",
     images: ["/opengraph-image.jpeg"],
   },
+  other: {
+    "itemprop:name": "NextTrailer",
+    "itemprop:description": "Il primo social network dedicato al mondo del cinema. Gestisci i tuoi film e serie tv e rimani sempre aggiornato",
+    "itemprop:image": "https://www.nextrailer.it/opengraph-image.jpeg",
+  },
   alternates: {
     canonical: "/",
   }

@@ -26,7 +26,12 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "NextTrailer",
     description: "Il primo social network dedicato al mondo del cinema. Gestisci i tuoi film e serie tv e rimani sempre aggiornato",
-    images: ["/opengraph-image.jpeg"]
+    images: ["/opengraph-image.jpeg"],
+  },
+  other: {
+    "itemprop:name": "NextTrailer",
+    "itemprop:description": "Il primo social network dedicato al mondo del cinema. Gestisci i tuoi film e serie tv e rimani sempre aggiornato",
+    "itemprop:image": "https://www.nextrailer.it/opengraph-image.jpeg",
   }
 };
 
@@ -39,10 +44,10 @@ export default function RootLayout({
     "@context": "https://schema.org",
     "@type": "WebSite",
     name: "NextTrailer",
-    url: "https://nextrailer.it",
+    url: "https://www.nextrailer.it",
     potentialAction: {
       "@type": "SearchAction",
-      target: "https://nextrailer.it/search?q={search_term_string}",
+      target: "https://www.nextrailer.it/search?q={search_term_string}",
       "query-input": "required name=search_term_string"
     }
   };
