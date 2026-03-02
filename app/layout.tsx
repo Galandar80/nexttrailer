@@ -10,6 +10,8 @@ export const metadata: Metadata = {
   openGraph: {
     title: "NextTrailer",
     description: "Il primo social network dedicato al mondo del cinema. Gestisci i tuoi film e serie tv e rimani sempre aggiornato",
+    url: "https://www.nextrailer.it",
+    siteName: "NextTrailer",
     type: "website",
     images: [
       {
