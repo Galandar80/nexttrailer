@@ -5,17 +5,17 @@ import JsonLd from "@/components/JsonLd";
 
 export const metadata: Metadata = {
   title: "NextTrailer",
-  description: "Scopri film, serie e news con trailer e community",
+  description: "Il primo social network dedicato al mondo del cinema. Gestisci i tuoi film e serie tv e rimani sempre aggiornato",
   metadataBase: new URL("https://nextrailer.it"),
   openGraph: {
     title: "NextTrailer",
-    description: "Scopri film, serie e news con trailer e community",
+    description: "Il primo social network dedicato al mondo del cinema. Gestisci i tuoi film e serie tv e rimani sempre aggiornato",
     type: "website"
   },
   twitter: {
     card: "summary_large_image",
     title: "NextTrailer",
-    description: "Scopri film, serie e news con trailer e community"
+    description: "Il primo social network dedicato al mondo del cinema. Gestisci i tuoi film e serie tv e rimani sempre aggiornato"
   }
 };
 

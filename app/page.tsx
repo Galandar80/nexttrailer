@@ -3,7 +3,7 @@ import Home from "@/screens/Home";
 
 export const metadata: Metadata = {
   title: "NextTrailer",
-  description: "Scopri film e serie, organizza la visione e non perdere nessuna uscita.",
+  description: "Il primo social network dedicato al mondo del cinema. Gestisci i tuoi film e serie tv e rimani sempre aggiornato",
   alternates: {
     canonical: "/",
   }
