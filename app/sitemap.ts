@@ -2,7 +2,7 @@ import { MetadataRoute } from 'next';
 
 const FIREBASE_PROJECT_ID = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
 const FIREBASE_API_KEY = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://nextrailer.it';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.nextrailer.it';
 
 const fetchCollection = async (collection: string) => {
   if (!FIREBASE_PROJECT_ID || !FIREBASE_API_KEY) return [];
