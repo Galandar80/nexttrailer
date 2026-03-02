@@ -5,32 +5,33 @@ import JsonLd from "@/components/JsonLd";
 
 export const metadata: Metadata = {
   title: "NextTrailer",
-  description: "Il primo social network dedicato al mondo del cinema. Gestisci i tuoi film e serie tv e rimani sempre aggiornato",
+  description: "Scopri film e serie, organizza la visione e non perdere nessuna uscita.",
   metadataBase: new URL("https://www.nextrailer.it"),
   openGraph: {
     title: "NextTrailer",
-    description: "Il primo social network dedicato al mondo del cinema. Gestisci i tuoi film e serie tv e rimani sempre aggiornato",
+    description: "Scopri film e serie, organizza la visione e non perdere nessuna uscita.",
     url: "https://www.nextrailer.it",
     siteName: "NextTrailer",
     type: "website",
     images: [
       {
-        url: "/opengraph-image.jpeg",
+        url: "https://www.nextrailer.it/opengraph-image.jpeg",
         width: 1200,
         height: 630,
-        alt: "NextTrailer"
+        alt: "NextTrailer",
+        type: "image/jpeg",
       }
     ]
   },
   twitter: {
     card: "summary_large_image",
     title: "NextTrailer",
-    description: "Il primo social network dedicato al mondo del cinema. Gestisci i tuoi film e serie tv e rimani sempre aggiornato",
-    images: ["/opengraph-image.jpeg"],
+    description: "Scopri film e serie, organizza la visione e non perdere nessuna uscita.",
+    images: ["https://www.nextrailer.it/opengraph-image.jpeg"],
   },
   other: {
     "itemprop:name": "NextTrailer",
-    "itemprop:description": "Il primo social network dedicato al mondo del cinema. Gestisci i tuoi film e serie tv e rimani sempre aggiornato",
+    "itemprop:description": "Scopri film e serie, organizza la visione e non perdere nessuna uscita.",
     "itemprop:image": "https://www.nextrailer.it/opengraph-image.jpeg",
   }
 };
